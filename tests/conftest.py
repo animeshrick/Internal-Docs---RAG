@@ -12,7 +12,7 @@ RAW_FOLDER = PROJECT_ROOT / "data" / "raw"
 # Let the tests import the modules that live in the app/ folder.
 sys.path.insert(0, str(PROJECT_ROOT / "app"))
 
-from parsing_v2 import parse_folder  # noqa: E402
+from app.parsing_v2 import parse_folder  # noqa: E402
 
 
 @pytest.fixture(scope="session")
