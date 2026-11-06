@@ -1,0 +1,29 @@
+.env
+ragVenv
+data/parsed/
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.pytest_cache/
+
+# Secrets
+.env.*
+!.env.example
+
+# Word temp/lock files
+~$*
+*.tmp
+
+# Backups made while fixing raw files
+data/backup/
+
+# Local state / caches
+*.state.json
+.cache/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
