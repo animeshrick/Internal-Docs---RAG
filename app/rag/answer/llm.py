@@ -11,6 +11,7 @@ Steps inside answer_question():
 Try it from the terminal:
     python -m app.rag.answer.llm "Can I use ChatGPT for work?"
 """
+import logging
 import os
 import re
 import sys
@@ -20,6 +21,8 @@ import requests
 
 from app.core.config import get_required_setting
 from app.rag.answer.retriever import search_chunks
+
+logger = logging.getLogger(__name__)
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 # Model names can be changed in .env without touching the code (check the current list in the Groq console).
@@ -87,8 +90,9 @@ def call_groq(model_name, messages, max_tokens, temperature=0.0):
 
         # 429 = rate limit (common on the free plan). Wait and try the same request again.
         if response.status_code in RETRY_STATUS_CODES and attempt_number < MAXIMUM_ATTEMPTS:
-            print(f"  Groq is busy (status {response.status_code}), waiting {SECONDS_TO_WAIT_BEFORE_RETRY} seconds "
-                  f"(attempt {attempt_number} of {MAXIMUM_ATTEMPTS})")
+            logger.warning("Groq is busy (status %s), waiting %ds (attempt %d of %d)",
+                           response.status_code, SECONDS_TO_WAIT_BEFORE_RETRY,
+                           attempt_number, MAXIMUM_ATTEMPTS)
             time.sleep(SECONDS_TO_WAIT_BEFORE_RETRY)
             continue
 
@@ -203,5 +207,8 @@ def print_answer(result):
 
 
 if __name__ == "__main__":
+    from app.core.logs import setup_logging
+
+    setup_logging()
     question_from_user = " ".join(sys.argv[1:]) or "Can I use ChatGPT for work?"
     print_answer(answer_question(question_from_user))

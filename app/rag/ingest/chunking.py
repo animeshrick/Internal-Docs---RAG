@@ -260,8 +260,11 @@ if __name__ == "__main__":
     import collections
     import statistics
 
+    from app.core.logs import setup_logging
     from app.core.paths import CHUNKS_FILE_PATH, RAW_DOCS_DIR
     from app.rag.ingest.parsing import parse_folder
+
+    setup_logging()
 
     docs, _ = parse_folder(RAW_DOCS_DIR)
     chunks, skipped = chunk_all(docs)

@@ -42,6 +42,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
+from app.core.logs import setup_logging
 from app.identity import auth
 from app.hr.leave import service as leave_service
 from app.hr.leave import store as leave_store
@@ -55,7 +56,8 @@ from app.identity.auth import AuthError
 from app.hr.leave.service import LeaveError
 from app.hr.payroll.service import PayrollError
 
-logger = logging.getLogger("hr_chatbot")
+setup_logging()                      # the API is an entry point too
+logger = logging.getLogger(__name__)
 
 MAXIMUM_QUESTION_LENGTH = 1000
 MAXIMUM_PASSWORD_INPUT_LENGTH = 200   # only stops huge inputs; the real rules are in auth.py

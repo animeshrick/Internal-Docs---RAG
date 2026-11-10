@@ -15,6 +15,7 @@ app/
   core/
     paths.py             PROJECT_ROOT and the data paths, in one place
     config.py            .env loading and get_required_setting()
+    logs.py              setup_logging(), called by entry points only
     supabase.py          the generic PostgREST client every store shares
   rag/
     ingest/
@@ -77,6 +78,25 @@ pytest tests/ -q
 
 Before the first embed: run the files in `sql/` in order in the Supabase SQL editor,
 then deploy the embedding function with `supabase functions deploy embed --no-verify-jwt`.
+
+## Logging
+
+Two separate channels, on purpose:
+
+* **Diagnostics go to a logger, on stderr.** Every module does
+  `logger = logging.getLogger(__name__)` and logs its own progress, retries and
+  skipped files. No module adds a handler, so importing one stays silent.
+* **What you asked to see goes to stdout** with `print`: the answer, the score
+  table, the chunk counts. So `python -m app.rag.eval.evaluation > scores.txt`
+  captures the scores and leaves the chatter on screen.
+
+Only entry points call `setup_logging()`: `app/main.py` and each `__main__` block.
+Set the level with `LOG_LEVEL` in `.env`, or per run:
+
+```bash
+LOG_LEVEL=DEBUG python -m app.rag.ingest.chunking     # adds per-document detail
+LOG_LEVEL=WARNING python -m app.rag.ingest.embeddings # only retries and problems
+```
 
 ## Dependencies
 

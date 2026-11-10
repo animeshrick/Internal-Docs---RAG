@@ -12,6 +12,7 @@ Run:
     python app/embeddings_with_voyage.py --dry-run     (shows the plan, changes nothing)
     python app/embeddings_with_voyage.py               (embeds and saves)
 """
+import logging
 import os
 import sys
 import time
@@ -21,6 +22,8 @@ import requests
 from app.core.config import get_required_setting
 from app.core.supabase import REQUEST_TIMEOUT_SECONDS
 from app.rag.ingest.index import ingest
+
+logger = logging.getLogger(__name__)
 
 VOYAGE_API_URL = "https://api.voyageai.com/v1/embeddings"
 VOYAGE_MODEL_NAME = os.getenv("VOYAGE_MODEL", "voyage-3.5-lite")
@@ -48,8 +51,8 @@ def embed_documents(texts):
         response = requests.post(VOYAGE_API_URL, headers=headers, json=request_body, timeout=REQUEST_TIMEOUT_SECONDS)
 
         if response.status_code == 429:    # 429 = "too many requests"; wait and try again
-            print(f"  rate limit reached, waiting {SECONDS_TO_WAIT_AFTER_RATE_LIMIT} seconds "
-                  f"(attempt {attempt_number} of {MAXIMUM_ATTEMPTS})")
+            logger.warning("Voyage rate limit reached, waiting %ds (attempt %d of %d)",
+                           SECONDS_TO_WAIT_AFTER_RATE_LIMIT, attempt_number, MAXIMUM_ATTEMPTS)
             time.sleep(SECONDS_TO_WAIT_AFTER_RATE_LIMIT)
             continue
 
@@ -69,6 +72,9 @@ def embed_documents(texts):
 
 
 if __name__ == "__main__":
+    from app.core.logs import setup_logging
+
+    setup_logging()
     ingest(
         table_name=TABLE_NAME,
         embedding_model_name=VOYAGE_MODEL_NAME,

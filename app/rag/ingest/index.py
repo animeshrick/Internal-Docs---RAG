@@ -11,6 +11,7 @@ The main function is ingest(). It does this:
     4. delete stored chunks that no longer exist in chunks.jsonl
     5. check that the row count in Supabase matches the chunk count
 """
+import logging
 import json
 
 import requests
@@ -25,6 +26,8 @@ from app.core.supabase import (
     get_table_url,
     split_into_batches,
 )
+
+logger = logging.getLogger(__name__)
 
 # ------------------------------------------------------------------ reading
 def load_chunks(chunks_file_path=CHUNKS_FILE_PATH):
@@ -149,12 +152,10 @@ def ingest(table_name, embedding_model_name, embed_documents, batch_size, dry_ru
     chunks_to_embed = find_chunks_to_embed(chunks, existing_rows, embedding_model_name)
     stale_chunk_ids = find_stale_chunk_ids(chunks, existing_rows)
 
-    print(f"Chunks in file      : {len(chunks)}")
-    print(f"Already up to date  : {len(chunks) - len(chunks_to_embed)}")
-    print(f"To embed and save   : {len(chunks_to_embed)}")
-    print(f"To delete (stale)   : {len(stale_chunk_ids)}")
+    logger.info("chunks in file: %d | already up to date: %d | to embed: %d | stale to delete: %d",
+                len(chunks), len(chunks) - len(chunks_to_embed), len(chunks_to_embed), len(stale_chunk_ids))
     if dry_run:
-        print("Dry run: nothing was changed.")
+        logger.info("dry run: nothing was changed")
         return
 
     if stale_chunk_ids:
@@ -166,9 +167,11 @@ def ingest(table_name, embedding_model_name, embed_documents, batch_size, dry_ru
         rows = [build_row(chunk, vector, embedding_model_name)
                 for chunk, vector in zip(batch_of_chunks, embedding_vectors)]
         upsert_rows(table_name, rows)   # saved batch by batch, so a crash can be resumed by running again
-        print(f"  batch {batch_number}: saved {len(rows)} chunks")
+        logger.info("batch %d: saved %d chunks", batch_number, len(rows))
 
     rows_in_supabase = count_rows(table_name)
-    print(f"Rows in Supabase    : {rows_in_supabase} (expected {len(chunks)})")
-    if rows_in_supabase != len(chunks):
-        print("WARNING: the counts differ. Check for chunks with a status you filtered out, or run again.")
+    if rows_in_supabase == len(chunks):
+        logger.info("rows in Supabase: %d, as expected", rows_in_supabase)
+    else:
+        logger.warning("rows in Supabase: %d but chunks.jsonl has %d. Check for chunks with a status you "
+                       "filtered out, or run again.", rows_in_supabase, len(chunks))

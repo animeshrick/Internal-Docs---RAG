@@ -7,6 +7,7 @@ parse_folder(folder)   -> (list of parsed docs, list of skipped files)
 validate(info)         -> list of problems/warnings for one parsed doc
 chunk_metadata(info)   -> fields the chunker should copy onto every chunk
 """
+import logging
 import re
 from datetime import datetime
 from pathlib import Path
@@ -15,6 +16,8 @@ from docx import Document
 from docx.oxml.ns import qn
 from docx.table import Table
 from docx.text.paragraph import Paragraph
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------- constants
 HEADING_LEVELS = {"Title": 0, "Heading 1": 1, "Heading 2": 2, "Heading 3": 3}
@@ -170,7 +173,7 @@ def parse_docx(doc, doc_name):
             # Extract document ID and summary from specific styles
             if style in ("SmallTag", "Eyebrow"):  # tag line above the title, e.g. "... POLICY HR-LEAVE-001"
                 m = DOC_ID_RE.search(text)
-                print(f"parse_docx: {m}")
+                logger.debug("doc code found in the tag line: %s", m.group() if m else None)
                 if m:
                     info["doc_id"] = m.group()
                 continue
@@ -259,7 +262,8 @@ def _parse_folder(folder, strict, label):
             skipped.append((path.name, "no HR doc code / metadata table - not an HR policy file"))
             continue
         docs.append(info)
-    print(f"{label}: {len(docs)} docs, {len(skipped)} skipped[{', '.join(why for _, why in skipped)}]  from {folder}")
+    logger.info("%s: %d docs, %d skipped [%s] from %s",
+                label, len(docs), len(skipped), ", ".join(why for _, why in skipped), folder)
     return docs, skipped
 
 
@@ -300,8 +304,11 @@ def validate(info):
 
 if __name__ == "__main__":
     import collections
+
+    from app.core.logs import setup_logging
     from app.core.paths import RAW_DOCS_DIR
 
+    setup_logging()
     docs, skipped = parse_folder(RAW_DOCS_DIR)
     for d in docs:
         counts = dict(collections.Counter(b["type"] for b in d["blocks"]))

@@ -15,6 +15,7 @@ Scores:
     MRR      : average of 1/position of the first right chunk (1.0 is perfect, 0 means never found)
 """
 import json
+import logging
 from collections import defaultdict
 
 from app.core.config import PROJECT_ROOT
@@ -27,6 +28,8 @@ NUMBER_OF_RESULTS = 5
 def load_questions(questions_file_path=QUESTIONS_FILE_PATH):
     with open(questions_file_path, encoding="utf8") as questions_file:
         return json.load(questions_file)
+
+logger = logging.getLogger(__name__)
 
 
 def find_first_hit_position(returned_chunk_ids, expected_sections):
@@ -107,7 +110,7 @@ def run_weight_sweep():
     from app.rag.answer.retriever import search_chunks_with_vector
 
     questions = load_questions()
-    print("Embedding each question once...")
+    logger.info("embedding each question once")
     question_vectors_by_text = {item["question"]: embed_one_text(item["question"]) for item in questions}
 
     print("\nkeyword_weight  semantic_weight   hit@1   hit@3   hit@5    MRR")
@@ -124,12 +127,16 @@ def run_evaluation(search_function):
     question_results = []
     for question_record in load_questions():
         question_results.append(evaluate_question(question_record, search_function))
-        print(f"  checked question {question_record['id']}")
+        logger.info("checked question %s", question_record["id"])
     return question_results
 
 
 if __name__ == "__main__":
     import sys
+
+    from app.core.logs import setup_logging
+
+    setup_logging()
 
     if "--sweep" in sys.argv:
         run_weight_sweep()

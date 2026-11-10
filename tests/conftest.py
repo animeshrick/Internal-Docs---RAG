@@ -1,6 +1,4 @@
 """Shared setup for all tests. pytest loads this file automatically."""
-import contextlib
-import io
 import sys
 from pathlib import Path
 
@@ -18,7 +16,7 @@ from app.rag.ingest.parsing import parse_folder  # noqa: E402
 @pytest.fixture(scope="session")
 def parsed_documents():
     """Parse the 14 raw files once and share the result with every test."""
-    # parse_folder prints a summary line; we hide it to keep the test output clean.
-    with contextlib.redirect_stdout(io.StringIO()):
-        documents, _skipped_files = parse_folder(RAW_FOLDER)
+    # parse_folder logs its summary now instead of printing it, so there is nothing
+    # to silence here: pytest shows captured logs only for failing tests.
+    documents, _skipped_files = parse_folder(RAW_FOLDER)
     return documents

@@ -81,5 +81,8 @@ def print_results(question, results):
 
 
 if __name__ == "__main__":
+    from app.core.logs import setup_logging
+
+    setup_logging()
     question_from_user = " ".join(sys.argv[1:]) or "How many casual leaves do I get?"
     print_results(question_from_user, search_chunks(question_from_user))
