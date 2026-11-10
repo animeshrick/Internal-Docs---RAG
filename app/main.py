@@ -2,7 +2,10 @@
 FastAPI app for the HR policy chatbot.
 
 Run from the project root:
-    uvicorn main:app --app-dir app --reload
+    uvicorn app.main:app --reload
+
+The request and response shapes live in app/api/requests.py and app/api/responses.py;
+the input size limits in app/api/limits.py.
 
 Then open http://127.0.0.1:8000/docs to try it in the browser.
 
@@ -39,9 +42,31 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
+from app.api.limits import (
+    ALLOWED_DOCUMENT_TYPES,
+    MAXIMUM_DOCUMENT_BYTES,
+    MAXIMUM_PASSWORD_INPUT_LENGTH,
+    MAXIMUM_QUESTION_LENGTH,
+)
+from app.api.requests import (
+    AttachDocumentRequest,
+    ChangePasswordRequest,
+    ChatRequest,
+    LeaveApplyRequest,
+    LeaveDecisionRequest,
+    LoginRequest,
+    RegisterRequest,
+    ResetPasswordRequest,
+)
+from app.api.responses import (
+    ChatHistoryMessage,
+    ChatResponse,
+    CredentialsResponse,
+    LoginResponse,
+    ProfileResponse,
+)
 from app.core.logs import setup_logging
 from app.identity import auth
 from app.hr.leave import service as leave_service
@@ -58,11 +83,6 @@ from app.hr.payroll.service import PayrollError
 
 setup_logging()                      # the API is an entry point too
 logger = logging.getLogger(__name__)
-
-MAXIMUM_QUESTION_LENGTH = 1000
-MAXIMUM_PASSWORD_INPUT_LENGTH = 200   # only stops huge inputs; the real rules are in auth.py
-MAXIMUM_DOCUMENT_BYTES = 5 * 1024 * 1024
-ALLOWED_DOCUMENT_TYPES = ("application/pdf", "image/png", "image/jpeg")
 
 app = FastAPI(title="HR Policy Chatbot")
 
@@ -123,94 +143,7 @@ def require_hr(employee: dict = Depends(get_ready_employee)):
     return employee
 
 
-# ------------------------------------------------------------------ request and response shapes
-class LoginRequest(BaseModel):
-    emp_id: str = Field(min_length=1, max_length=50)
-    password: str = Field(min_length=1, max_length=MAXIMUM_PASSWORD_INPUT_LENGTH)
-
-
-class LoginResponse(BaseModel):
-    access_token: str
-    token_type: str
-    must_change_password: bool
-    role: str
-    full_name: str
-    emp_id: str
-
-
-class ChangePasswordRequest(BaseModel):
-    current_password: str = Field(min_length=1, max_length=MAXIMUM_PASSWORD_INPUT_LENGTH)
-    new_password: str = Field(min_length=1, max_length=MAXIMUM_PASSWORD_INPUT_LENGTH)
-
-
-class RegisterRequest(BaseModel):
-    emp_id: str = Field(min_length=1, max_length=50)
-    role: Literal["employee", "hr", "ceo", "pm"] = "employee"
-
-
-class ResetPasswordRequest(BaseModel):
-    emp_id: str = Field(min_length=1, max_length=50)
-
-
-class CredentialsResponse(BaseModel):
-    """The temporary password is shown only in this response. HR passes it to the employee."""
-
-    emp_id: str
-    full_name: str
-    role: str
-    temporary_password: str
-
-
 MESSAGES_SHOWN_TO_THE_AI = 6      # the AI reads the last 3 questions and 3 answers
-
-
-class ChatRequest(BaseModel):
-    """What the client sends to /chat."""
-
-    question: str = Field(min_length=1, max_length=MAXIMUM_QUESTION_LENGTH)
-
-
-class ChatResponse(BaseModel):
-    """What /chat sends back. Each source is a dictionary (number, chunk_id, doc_id, title ...)."""
-
-    question: str
-    rewritten_question: str
-    answer: str
-    answerable: bool
-    sources: list[dict]
-    # Set when the assistant is waiting for "yes": {"id", "action_type", "summary", "allows_document", "expires_at"}
-    pending_action: dict | None = None
-    # The exact times (UTC) the question and the answer were saved, so the page can show them. None if saving failed.
-    asked_at: str | None = None
-    answered_at: str | None = None
-
-
-class ChatHistoryMessage(BaseModel):
-    """One saved message (a question or an answer)."""
-
-    id: int
-    sender: Literal["user", "assistant"]
-    message: str
-    sources: list[dict] = []
-    created_at: str
-
-
-class LeaveApplyRequest(BaseModel):
-    leave_type: str = Field(min_length=1, max_length=30)
-    start_date: datetime.date
-    end_date: datetime.date | None = None
-    day_type: Literal["full", "half"] = "full"
-    reason: str | None = Field(default=None, max_length=500)
-    document_path: str | None = Field(default=None, max_length=300)   # from POST /leave/documents
-
-
-class LeaveDecisionRequest(BaseModel):
-    decision: Literal["approved", "rejected"]
-    note: str | None = Field(default=None, max_length=500)
-
-
-class AttachDocumentRequest(BaseModel):
-    document_path: str = Field(min_length=1, max_length=300)
 
 
 # ------------------------------------------------------------------ endpoints
@@ -288,24 +221,6 @@ def chat(request: ChatRequest, employee: dict = Depends(get_ready_employee)):
             status_code=502,
             detail="The assistant could not answer right now. Please try again in a moment.",
         )
-
-
-class ProfileResponse(BaseModel):
-    """The logged-in employee's own profile. A value is None when it is not recorded."""
-
-    emp_id: str
-    full_name: str
-    role: str
-    dept: str | None = None
-    email: str | None = None
-    phone: str | None = None
-    gender: str | None = None
-    date_of_joining: str | None = None
-    date_of_birth: str | None = None
-    address: str | None = None
-    emergency_contact: str | None = None
-    manager_name: str | None = None
-    is_active: bool
 
 
 @app.get("/me/profile", response_model=ProfileResponse)

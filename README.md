@@ -11,7 +11,11 @@ the same way and answered from a hybrid keyword + vector search over those chunk
 
 ```
 app/
-  main.py                FastAPI app: routes only
+  main.py                FastAPI app: routes, dependencies, error handlers
+  api/
+    requests.py          the shape of what a client sends (one model per body)
+    responses.py         the shape of what the API sends back (every response_model)
+    limits.py            input size caps shared by the models and the handlers
   core/
     paths.py             PROJECT_ROOT and the data paths, in one place
     config.py            .env loading and get_required_setting()
