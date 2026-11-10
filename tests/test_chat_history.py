@@ -6,8 +6,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.rag.answer import assistant as assistant
-import chat_store
-import main
+from app.chat import store as chat_store
+from app import main
 
 client = TestClient(main.app)
 HEADERS = {"Authorization": "Bearer any-token"}

@@ -6,12 +6,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.rag.answer import assistant as assistant
-import main
-import payroll_service
-import payroll_store
-import people_service
-import people_store
-import storage_store
+from app import main
+from app.hr.payroll import service as payroll_service
+from app.hr.payroll import store as payroll_store
+from app.hr.people import service as people_service
+from app.hr.people import store as people_store
+from app.files import storage as storage_store
 
 PEOPLE = {
     1: {"id": 1, "emp_id": "EMP001", "full_name": "Priya Sen", "dept": "HR", "salary": 90000, "role": "hr"},

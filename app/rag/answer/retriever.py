@@ -8,7 +8,7 @@ How it works:
     3. Only Approved documents (and the company profile) can be returned.
 
 Try it from the terminal:
-    python app/retriever.py "How many casual leaves do I get?"
+    python -m app.rag.answer.retriever "How many casual leaves do I get?"
 """
 import sys
 
@@ -16,7 +16,7 @@ from app.rag.ingest.embeddings import embed_one_text
 from app.core.supabase import call_database_function
 
 DEFAULT_NUMBER_OF_RESULTS = 5
-# Chosen with the evaluation sweep (python app/evaluation.py --sweep):
+# Chosen with the evaluation sweep (python -m app.rag.eval.evaluation --sweep):
 # meaning counts twice as much as keywords. This raised hit@1 from 59.6% to 70.2% with no loss at hit@5.
 DEFAULT_KEYWORD_WEIGHT = 1.0
 DEFAULT_SEMANTIC_WEIGHT = 2.0

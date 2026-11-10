@@ -1,5 +1,5 @@
 """
-people_service.py - WHO may see data about WHOM, and the employee profile text.
+hr/people/service.py - WHO may see data about WHOM, and the employee profile text.
 
 Rules:
     - Everyone can ask about themselves.
@@ -12,11 +12,11 @@ The AI only picks a tool and a name. This code decides, and it runs before any d
 """
 import re
 
-import leave_service
-import leave_store
-import payroll_service
-import payroll_store
-import people_store
+from app.hr.leave import service as leave_service
+from app.hr.leave import store as leave_store
+from app.hr.payroll import service as payroll_service
+from app.hr.payroll import store as payroll_store
+from app.hr.people import store as people_store
 
 NO_ANSWER = "I don't have an answer for this question."
 NOT_FOUND = "I could not find exactly one employee with that name or ID."

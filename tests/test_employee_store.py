@@ -2,7 +2,7 @@
 import pytest
 import requests
 
-import employee_store
+from app.hr.employees import store as employee_store
 
 
 class FakeResponse:

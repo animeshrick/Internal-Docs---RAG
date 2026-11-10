@@ -4,9 +4,9 @@ from datetime import date
 import pytest
 from fastapi.testclient import TestClient
 
-import auth
-import leave_service
-import main
+from app.identity import auth as auth
+from app.hr.leave import service as leave_service
+from app import main
 from fakes import FakeDatabase
 
 client = TestClient(main.app)

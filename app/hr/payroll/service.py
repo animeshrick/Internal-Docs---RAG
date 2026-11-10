@@ -1,17 +1,17 @@
 """
-payroll_service.py - who may see which salary, and how it is shown.
+hr/payroll/service.py - who may see which salary, and how it is shown.
 
 Rules:
     - Everyone can see their OWN salary breakdown and payslips.
-    - Only HR can ask about somebody else, except the CEO and the CTO (confidential, see people_service.py).
+    - Only HR can ask about somebody else, except the CEO and the CTO (confidential, see hr/people/service.py).
     - Anyone else asking about another person gets the same short reply as for an unknown person,
       so the reply never confirms that the person exists.
     The AI only picks the tool. This code decides what is shown, and nothing here is sent to the AI.
 """
 from datetime import date
 
-import payroll_store
-import storage_store
+from app.hr.payroll import store as payroll_store
+from app.files import storage as storage_store
 
 NO_ANSWER = "I don't have an answer for this question."
 PAYSLIPS_BUCKET = "payslips"
@@ -66,7 +66,7 @@ def answer_salary_question(requester, person_text):
     requester is the logged-in employee dictionary. person_text is who the question is about:
     empty or "me" means the requester. Returns the sentence to show.
     """
-    import people_service                                   # imported here because people_service also imports this file
+    from app.hr.people import service as people_service                                   # imported here because people_service also imports this file
 
     target = people_service.resolve_target(requester, person_text)       # raises PeopleError when not allowed
     if target is None:

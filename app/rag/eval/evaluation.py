@@ -5,8 +5,8 @@ For every question in eval/questions.json we run the retriever and check whether
 expected sections appears in the top results.
 
 Run:
-    python app/evaluation.py            (scores, misses, similarity of the best chunk)
-    python app/evaluation.py --sweep    (tries different keyword/semantic weights)
+    python -m app.rag.eval.evaluation            (scores, misses, similarity of the best chunk)
+    python -m app.rag.eval.evaluation --sweep    (tries different keyword/semantic weights)
 
 Scores:
     hit at 1 : the right chunk is the very first result
@@ -89,7 +89,7 @@ def summarize_by_kind(question_results):
     return {kind: summarize(items) for kind, items in grouped.items()}
 
 
-# (keyword_weight, semantic_weight) pairs tried by "python app/evaluation.py --sweep"
+# (keyword_weight, semantic_weight) pairs tried by "python -m app.rag.eval.evaluation --sweep"
 WEIGHT_COMBINATIONS = [(1.0, 1.0), (1.0, 2.0), (1.0, 3.0), (2.0, 1.0), (0.5, 1.0)]
 
 

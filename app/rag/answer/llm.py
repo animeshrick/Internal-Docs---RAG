@@ -9,7 +9,7 @@ Steps inside answer_question():
                  and says "I could not find this..." when the chunks do not contain the answer.
 
 Try it from the terminal:
-    python app/llm.py "Can I use ChatGPT for work?"
+    python -m app.rag.answer.llm "Can I use ChatGPT for work?"
 """
 import os
 import re

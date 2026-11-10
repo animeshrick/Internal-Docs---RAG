@@ -1,8 +1,8 @@
 """
-leave_store.py - reads and writes leave data in Supabase (leave_types, leave_requests, pending_actions ...).
+hr/leave/store.py - reads and writes leave data in Supabase (leave_types, leave_requests, pending_actions ...).
 
-Same style as employee_store.py: plain "requests" calls to PostgREST. This file only talks to the database.
-The leave rules (how many days, who can approve ...) are in leave_service.py.
+Same style as the other stores: plain "requests" calls to PostgREST. This file only talks to the database.
+The leave rules (how many days, who can approve ...) are in service.py next to it.
 """
 import requests
 

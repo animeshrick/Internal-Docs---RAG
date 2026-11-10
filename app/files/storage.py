@@ -1,5 +1,5 @@
 """
-storage_store.py - private files in Supabase Storage (leave documents now, payslips later).
+files/storage.py - private files in Supabase Storage (leave documents now, payslips later).
 
 The bucket "leave-documents" is private. Nobody can open a file by guessing its address.
 To let someone read a file we make a signed link that stops working after a few minutes.

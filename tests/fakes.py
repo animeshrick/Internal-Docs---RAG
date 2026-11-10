@@ -2,7 +2,7 @@
 Call FakeDatabase().install(monkeypatch) and every leave_store function reads and writes this fake instead."""
 from datetime import date, datetime, timedelta, timezone
 
-import leave_store
+from app.hr.leave import store as leave_store
 
 
 class FakeDatabase:

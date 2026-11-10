@@ -1,6 +1,6 @@
 """
-payroll_store.py - reads salary data and payslips from Supabase (employee.salary, salary_components, payslips).
-Only the database access is here. Who may see what is decided in payroll_service.py.
+hr/payroll/store.py - reads salary data and payslips from Supabase (employee.salary, salary_components, payslips).
+Only the database access is here. Who may see what is decided in service.py next to it.
 """
 import requests
 

@@ -42,18 +42,18 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
-import auth
-import leave_service
-import leave_store
-import payroll_service
-import payroll_store
-import storage_store
+from app.identity import auth
+from app.hr.leave import service as leave_service
+from app.hr.leave import store as leave_store
+from app.hr.payroll import service as payroll_service
+from app.hr.payroll import store as payroll_store
+from app.files import storage as storage_store
 from app.rag.answer.assistant import answer_chat_message
-import chat_store
-import people_service
-from auth import AuthError
-from leave_service import LeaveError
-from payroll_service import PayrollError
+from app.chat import store as chat_store
+from app.hr.people import service as people_service
+from app.identity.auth import AuthError
+from app.hr.leave.service import LeaveError
+from app.hr.payroll.service import PayrollError
 
 logger = logging.getLogger("hr_chatbot")
 

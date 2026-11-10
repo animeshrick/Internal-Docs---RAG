@@ -4,14 +4,14 @@ assistant.py - decides what a chat message is about and answers it.
 llm.py answers policy questions from the documents. This file sits in front of it:
 
     1. If a leave is waiting for "yes", a message of "yes" / "no" confirms or cancels it (plain word check, no AI).
-    2. Otherwise a small Groq call with TOOLS picks one of (salary and payslips: see payroll_service.py):
+    2. Otherwise a small Groq call with TOOLS picks one of (salary and payslips: see hr/payroll/service.py):
          search_policy      -> llm.answer_question (the documents only)
          get_leave_balance  -> the employee's numbers + the policy text, combined in one answer
          list_my_leaves     -> the employee's requests + the policy text
          apply_leave        -> checks the rules, then asks "reply yes to confirm" (nothing is saved yet)
          cancel_leave       -> same, asks for confirmation first
     3. The AI only PICKS the tool and reads the dates. The rules, the checks and the saving are normal code
-       (leave_service.py), and every tool works only on the logged-in employee's own data.
+       (hr/leave/service.py), and every tool works only on the logged-in employee's own data.
 """
 import json
 import re
@@ -19,13 +19,13 @@ import time
 
 import requests
 
-import leave_service
-import leave_store
-import payroll_service
-import people_service
-import people_store
+from app.hr.leave import service as leave_service
+from app.hr.leave import store as leave_store
+from app.hr.payroll import service as payroll_service
+from app.hr.people import service as people_service
+from app.hr.people import store as people_store
 from app.core.config import get_required_setting
-from leave_service import LeaveError
+from app.hr.leave.service import LeaveError
 from app.rag.answer.llm import ANSWER_MAX_TOKENS, ANSWER_MODEL_NAME, ANSWER_SYSTEM_PROMPT, CITATION_PATTERN, GROQ_API_URL, MAXIMUM_ATTEMPTS, NUMBER_OF_CHUNKS_FOR_ANSWER, REASONING_EFFORT, REQUEST_TIMEOUT_SECONDS, RETRY_STATUS_CODES, SECONDS_TO_WAIT_BEFORE_RETRY, answer_question, build_context, call_groq, clean_answer_text, find_cited_sources
 from app.rag.answer.retriever import search_chunks
 

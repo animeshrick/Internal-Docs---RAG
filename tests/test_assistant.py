@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 
 from app.rag.answer import assistant as assistant
-import leave_service
+from app.hr.leave import service as leave_service
 from fakes import FakeDatabase
 
 TODAY = date(2026, 11, 7)

@@ -1,7 +1,7 @@
 """
-employee_store.py - reads and writes the "employee" and "employee_auth" tables in Supabase.
+hr/employees/store.py - reads and writes the "employee" and "employee_auth" tables in Supabase.
 
-Same style as supabase_store.py: plain "requests" calls to the Supabase REST API (PostgREST).
+Same style as the other stores: plain "requests" calls to the Supabase REST API (PostgREST).
 This file only talks to the database. The login rules (passwords, lockout, tokens) are in auth.py.
 """
 import requests

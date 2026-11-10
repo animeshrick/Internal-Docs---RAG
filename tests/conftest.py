@@ -11,7 +11,6 @@ RAW_FOLDER = PROJECT_ROOT / "data" / "raw"
 
 # Let the tests import the app package ("app.core.config", ...) whichever way pytest is started.
 sys.path.insert(0, str(PROJECT_ROOT))
-sys.path.insert(0, str(PROJECT_ROOT / "app"))   # TEMPORARY: bare "import leave_store" in old tests
 
 from app.rag.ingest.parsing import parse_folder  # noqa: E402
 

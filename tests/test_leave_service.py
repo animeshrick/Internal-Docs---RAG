@@ -3,9 +3,9 @@ from datetime import date
 
 import pytest
 
-import leave_service
+from app.hr.leave import service as leave_service
 from fakes import FakeDatabase
-from leave_service import LeaveError
+from app.hr.leave.service import LeaveError
 
 TODAY = date(2026, 11, 7)          # a Saturday, the example date used when the rules were agreed
 
@@ -283,5 +283,5 @@ def test_a_pm_login_role_approves_unmanaged_leave_without_hr_powers(database):
 
 
 def test_the_pm_role_can_be_given_to_a_login():
-    import auth
+    from app.identity import auth as auth
     assert "pm" in auth.ALLOWED_ROLES

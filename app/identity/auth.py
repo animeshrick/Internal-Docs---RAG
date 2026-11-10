@@ -9,7 +9,7 @@ How login works:
     4. Every later request sends the token. load_employee_from_token() checks it and reloads the employee
        from the database, so a deactivated employee or a changed role takes effect immediately.
 
-The database is only touched through employee_store.py.
+The database is only touched through app/hr/employees/store.py.
 """
 import re
 import secrets
@@ -19,7 +19,7 @@ from functools import lru_cache
 import bcrypt
 import jwt
 
-import employee_store
+from app.hr.employees import store as employee_store
 from app.core.config import get_required_setting
 
 ALLOWED_ROLES = ("employee", "hr", "ceo", "pm")      # pm = project manager: approves leave, but has no HR powers

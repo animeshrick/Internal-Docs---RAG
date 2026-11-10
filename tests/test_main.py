@@ -3,8 +3,8 @@ so no real Groq or Supabase calls are made."""
 import pytest
 from fastapi.testclient import TestClient
 
-import auth
-import main
+from app.identity import auth as auth
+from app import main
 
 client = TestClient(main.app)
 

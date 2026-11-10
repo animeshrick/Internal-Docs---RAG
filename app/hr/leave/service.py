@@ -1,5 +1,5 @@
 """
-leave_service.py - the leave RULES. No web code and no AI here, so every rule can be tested on its own.
+hr/leave/service.py - the leave RULES. No web code and no AI here, so every rule can be tested on its own.
 
 Rules (agreed with HR):
     - Casual 8 and sick 12 days per year, maternity 90 days per request (the numbers live in the leave_types table).
@@ -13,8 +13,8 @@ Rules (agreed with HR):
 """
 from datetime import date, datetime, timedelta, timezone
 
-import leave_store
-from auth import parse_timestamp
+from app.hr.leave import store as leave_store
+from app.identity.auth import parse_timestamp
 
 BACKDATE_LIMIT_DAYS = 7
 LEAVE_YEAR_START_MONTH = 4      # the leave year starts on 1 April (keep equal to the value in sql/04_leave_system.sql)

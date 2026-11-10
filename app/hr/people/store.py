@@ -1,11 +1,11 @@
 """
-people_store.py - finds an employee from what HR typed (an id, a name) with all the details the HR assistant may show.
-Only database access is here. Who may see whom is decided in people_service.py.
+hr/people/store.py - finds an employee from what HR typed (an id, a name) with all the details the HR assistant may show.
+Only database access is here. Who may see whom is decided in service.py next to it.
 """
 import re
 
 from app.core.supabase import read_rows
-from payroll_store import flatten_role
+from app.hr.payroll.store import flatten_role
 
 PROFILE_COLUMNS = ("id,emp_id,full_name,email,phone,dept,dob,doj,gender,manager_id,is_active,is_confidential,"
                    "full_current_address,emergency_ph_no,employee_auth(role)")

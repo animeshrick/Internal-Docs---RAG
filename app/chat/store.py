@@ -1,5 +1,5 @@
 """
-chat_store.py - saves and reads the chat history in Supabase (table chat_messages, see sql/09_chat_history.sql).
+chat/store.py - saves and reads the chat history in Supabase (table chat_messages, see sql/09_chat_history.sql).
 
 Messages are kept for 30 days. Older ones are deleted (at most once an hour, when someone chats) and are never returned.
 Every function takes the employee id, so a person can only ever read their own messages.
