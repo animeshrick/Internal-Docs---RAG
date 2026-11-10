@@ -10,8 +10,13 @@ Before the first run:
     3. Fill SUPABASE_URL and SUPABASE_SECRET_KEY in .env
 
 Run:
-    python app/embeddings.py --dry-run     (shows the plan, changes nothing)
-    python app/embeddings.py               (embeds and saves)
+    python -m app.rag.ingest.embeddings --dry-run     (shows the plan, changes nothing)
+    python -m app.rag.ingest.embeddings               (embeds and saves)
+
+This is the provider the whole pipeline uses: retriever.py embeds questions with
+embed_one_text() from here, and sql/02_hybrid_search_function.sql takes a 384-number
+vector. embeddings_with_voyage.py is a separate 1024-dimension experiment writing to
+its own table; it is not wired into retrieval and is kept out of git on purpose.
 """
 import sys
 import time
