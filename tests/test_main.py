@@ -44,7 +44,6 @@ def logged_in(monkeypatch):
 def no_chat_history(monkeypatch):
     """The chat history lives in Supabase, so every test here uses an empty, do-nothing history by default."""
     monkeypatch.setattr(main.chat_store, "list_messages", lambda employee_id, limit, before_id=None: [])
-    monkeypatch.setattr(main.chat_store, "delete_expired_messages_once_an_hour", lambda: None)
 
     def fake_save_exchange(employee_id, question_text, asked_at, answer_text, sources, answered_at):
         return {"id": 1, "created_at": asked_at.isoformat()}, {"id": 2, "created_at": answered_at.isoformat()}

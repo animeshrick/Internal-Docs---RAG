@@ -282,6 +282,8 @@ def decide_leave(approver, leave_id, decision, note=None):
         raise LeaveError("You cannot approve or reject your own leave.", 403)
     if not can_decide(approver, leave_row, requester, leave_type):
         raise LeaveError("Only the reporting manager (or the PM when there is no manager) or HR can decide this leave.", 403)
+    if decision == "rejected" and not (note or "").strip():
+        raise LeaveError("Please write the reason for rejecting this leave.", 400)
 
     updated_row = leave_store.update_leave_request(
         leave_id,

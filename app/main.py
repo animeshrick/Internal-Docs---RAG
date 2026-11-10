@@ -198,7 +198,6 @@ def chat(request: ChatRequest, employee: dict = Depends(get_ready_employee)):
     try:
         result = answer_chat_message(employee, request.question, history)
         try:
-            chat_store.delete_expired_messages_once_an_hour()
             question_row, answer_row = chat_store.save_exchange(
                 employee["employee_id"], request.question.strip(), asked_at, result["answer"], result.get("sources"),
                 datetime.datetime.now(datetime.timezone.utc))
@@ -225,9 +224,11 @@ def read_my_profile(employee: dict = Depends(get_ready_employee)):
 
 
 @app.get("/chat/history", response_model=list[ChatHistoryMessage])
-def chat_history(limit: int = Query(50, ge=1, le=100), before_id: int | None = Query(None, ge=1),
+def chat_history(limit: int = Query(chat_store.MESSAGES_KEPT_PER_EMPLOYEE, ge=1, le=100),
+                 before_id: int | None = Query(None, ge=1),
                  employee: dict = Depends(get_ready_employee)):
-    """My own chat messages of the last 30 days, oldest first. before_id loads the page before that message."""
+    """My own saved chat messages, oldest first. The database keeps only the newest
+    chat_store.MESSAGES_KEPT_PER_EMPLOYEE of them, so there is normally no older page."""
     return chat_store.list_messages(employee["employee_id"], limit, before_id)
 
 
@@ -247,7 +248,11 @@ def my_leaves(status: Literal["pending", "approved", "rejected", "cancelled"] | 
               employee: dict = Depends(get_ready_employee)):
     leave_types = leave_store.get_leave_types()
     rows = leave_store.list_leave_requests(employee["employee_id"], status)
-    return [dict(row, description=leave_service.describe_leave_row(row, leave_types)) for row in rows]
+    approvers = leave_store.get_employees_by_ids([row["approver_id"] for row in rows if row.get("approver_id")])
+    return [dict(row,
+                 description=leave_service.describe_leave_row(row, leave_types),
+                 decided_by_name=(approvers.get(row.get("approver_id")) or {}).get("full_name"))
+            for row in rows]
 
 
 def make_safe_filename(filename):

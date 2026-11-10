@@ -144,6 +144,22 @@ def test_a_colleague_cannot_decide_and_the_employee_cannot_approve_themselves(ap
     assert api.database.leave_requests[0]["status"] == "pending"
 
 
+def test_a_rejection_without_a_reason_is_refused_over_the_api(api):
+    api.employee = make_employee(1, role="hr")
+    leave = api.database.add_leave(3, "casual", "2026-11-10", "2026-11-10", 1, status="pending")
+    response = client.post(f"/leave/{leave['id']}/decision", json={"decision": "rejected"}, headers=HEADERS)
+    assert response.status_code == 400 and "reason for rejecting" in response.json()["detail"]
+    assert api.database.leave_requests[0]["status"] == "pending"
+
+
+def test_my_leaves_show_who_decided_each_one(api):
+    api.database.add_leave(3, "casual", "2026-11-10", "2026-11-10", 1, status="rejected")
+    api.database.leave_requests[0].update(approver_id=2, decision_note="team is short that week")
+    rows = client.get("/leave/mine", headers=HEADERS).json()
+    assert rows[0]["decided_by_name"] == "Rahul Verma"          # employee 2 is the one who decided
+    assert rows[0]["decision_note"] == "team is short that week"
+
+
 def test_decision_values_are_checked(api):
     api.employee = make_employee(1, role="hr")
     leave = api.database.add_leave(3, "casual", "2026-11-10", "2026-11-10", 1, status="pending")

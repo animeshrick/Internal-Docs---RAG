@@ -158,6 +158,15 @@ def test_maternity_is_decided_by_hr_only(database):
     assert leave_service.decide_leave(hr(), leave["id"], "approved")["status"] == "approved"
 
 
+def test_a_rejection_must_say_why(database):
+    leave = database.add_leave(3, "casual", "2026-11-10", "2026-11-10", 1, status="pending")
+    for empty_note in (None, "", "   "):
+        with pytest.raises(LeaveError, match="reason for rejecting"):
+            leave_service.decide_leave(staff(2), leave["id"], "rejected", empty_note)
+    assert database.leave_requests[0]["status"] == "pending"            # nothing was changed
+    assert leave_service.decide_leave(staff(2), leave["id"], "approved")["status"] == "approved"   # approving needs no reason
+
+
 def test_a_decided_leave_cannot_be_decided_again(database):
     leave = database.add_leave(3, "casual", "2026-11-10", "2026-11-10", 1, status="pending")
     leave_service.decide_leave(staff(2), leave["id"], "approved")
@@ -236,7 +245,7 @@ def test_without_a_manager_the_pm_is_the_approver(database):
 
 def test_hr_can_still_approve_when_there_is_no_manager(database):
     leave = database.add_leave(7, "casual", "2026-11-10", "2026-11-10", 1, status="pending")
-    assert leave_service.decide_leave(hr(), leave["id"], "rejected")["status"] == "rejected"
+    assert leave_service.decide_leave(hr(), leave["id"], "rejected", "no cover that day")["status"] == "rejected"
 
 
 def test_the_pm_does_not_override_a_real_manager(database):

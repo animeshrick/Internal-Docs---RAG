@@ -1,4 +1,4 @@
-"""Tests for the saved chat history: saving, 30 day limit, own messages only, and what the AI is shown."""
+"""Tests for the saved chat history: saving, the newest-10 limit, own messages only, and what the AI is shown."""
 import json
 from datetime import datetime, timedelta, timezone
 
@@ -20,24 +20,34 @@ def logged_in(monkeypatch):
 
 
 class FakeChatTable:
-    """Stands in for the chat_messages table (and for requests) so no Supabase call is made."""
+    """Stands in for the chat_messages table (and for requests) so no Supabase call is made.
+
+    Trims to the newest MESSAGES_KEPT_PER_EMPLOYEE on insert, the way the chat_messages_trim
+    trigger in sql/09_chat_history.sql does, so these tests see what production really stores.
+    """
 
     def __init__(self, monkeypatch):
         self.rows = []
         self.last_params = None
-        self.deleted_before = None
+        self.next_id = 1
         monkeypatch.setattr(chat_store, "read_rows", self.read_rows)
         monkeypatch.setattr(chat_store.requests, "post", self.post)
-        monkeypatch.setattr(chat_store.requests, "delete", self.delete)
         monkeypatch.setattr(chat_store, "check_response", lambda response, text: None)
-        monkeypatch.setattr(chat_store, "last_cleanup_time", 0.0)
 
     def post(self, url, headers=None, json=None, timeout=None):
         saved = []
         for row in json:
-            saved.append(dict(row, id=len(self.rows) + 1))
+            saved.append(dict(row, id=self.next_id))
+            self.next_id += 1
             self.rows.append(saved[-1])
+            self.trim(row["employee_id"])
         return type("Response", (), {"json": lambda self_: saved})()
+
+    def trim(self, employee_id):
+        """What the trigger does: delete everything but the newest few of this employee."""
+        theirs = sorted([r for r in self.rows if r["employee_id"] == employee_id], key=lambda r: r["id"])
+        for row in theirs[: -chat_store.MESSAGES_KEPT_PER_EMPLOYEE]:
+            self.rows.remove(row)
 
     def read_rows(self, table, params, description):
         self.last_params = params
@@ -45,10 +55,6 @@ class FakeChatTable:
         if "id" in params:
             rows = [r for r in rows if r["id"] < int(params["id"].replace("lt.", ""))]
         return sorted(rows, key=lambda r: r["id"], reverse=True)[: params["limit"]]
-
-    def delete(self, url, headers=None, params=None, timeout=None):
-        self.deleted_before = params["created_at"]
-        return type("Response", (), {})()
 
 
 @pytest.fixture
@@ -68,22 +74,32 @@ def test_an_exchange_is_saved_as_two_rows_with_their_own_times(table):
     assert (answer_row["sender"], answer_row["sources"], answer_row["created_at"]) == ("assistant", [{"number": 1}], "2026-11-09T17:00:03+00:00")
 
 
-def test_history_is_oldest_first_paged_and_limited_to_30_days(table):
+def test_history_is_oldest_first_and_paged(table):
     for number in range(1, 6):
         save(table, 4, f"question {number}")
     newest = chat_store.list_messages(4, 4)
     assert [row["id"] for row in newest] == [7, 8, 9, 10]
     assert [row["id"] for row in chat_store.list_messages(4, 4, before_id=7)] == [3, 4, 5, 6]
-    cutoff = datetime.fromisoformat(table.last_params["created_at"].replace("gte.", ""))
-    assert timedelta(days=29, hours=23) < datetime.now(timezone.utc) - cutoff < timedelta(days=30, hours=1)
+    assert "created_at" not in table.last_params      # no age filter: the newest few are always shown
 
 
-def test_old_messages_are_deleted_at_most_once_an_hour(table):
-    chat_store.delete_expired_messages_once_an_hour()
-    first_cutoff = table.deleted_before
-    table.deleted_before = None
-    chat_store.delete_expired_messages_once_an_hour()
-    assert first_cutoff.startswith("lt.") and table.deleted_before is None
+def test_only_the_newest_messages_are_kept(table):
+    kept = chat_store.MESSAGES_KEPT_PER_EMPLOYEE
+    for number in range(1, 8):                        # 7 exchanges = 14 rows, 4 more than the limit
+        save(table, 4, f"question {number}")
+    assert len(table.rows) == kept
+    everything = chat_store.list_messages(4, 100)
+    assert [row["id"] for row in everything] == list(range(15 - kept, 15))
+    assert everything[0]["message"] == "question 3"    # questions 1 and 2 and their answers are gone
+    assert everything[-1]["message"] == "answer to question 7"
+
+
+def test_the_limit_is_per_employee(table):
+    for number in range(1, 8):
+        save(table, 4, f"mine {number}")
+    save(table, 5, "theirs")
+    assert len(chat_store.list_messages(4, 100)) == chat_store.MESSAGES_KEPT_PER_EMPLOYEE
+    assert [row["message"] for row in chat_store.list_messages(5, 100)] == ["theirs", "answer to theirs"]
 
 
 def test_the_history_endpoint_returns_only_my_messages(table):
