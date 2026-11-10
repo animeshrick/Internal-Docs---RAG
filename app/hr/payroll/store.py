@@ -4,19 +4,10 @@ Only the database access is here. Who may see what is decided in service.py next
 """
 import requests
 
-from app.core.supabase import REQUEST_TIMEOUT_SECONDS, build_headers, check_response, get_table_url, read_rows
+from app.core.supabase import REQUEST_TIMEOUT_SECONDS, build_headers, check_response, flatten_role, get_table_url, read_rows
 
 SALARY_COLUMNS = "id,emp_id,full_name,dept,salary,employee_auth(role)"
 CEO_NAMES = ("ceo", "the ceo", "chief executive officer")
-
-
-def flatten_role(row):
-    """PostgREST sends the embedded login as a dictionary or a list. We want row["role"] (or None)."""
-    login = row.pop("employee_auth", None)
-    if isinstance(login, list):
-        login = login[0] if login else None
-    row["role"] = login["role"] if login else None
-    return row
 
 
 def get_salary_details(employee_id):

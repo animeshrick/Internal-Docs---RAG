@@ -1,4 +1,4 @@
-"""Tests for app/supabase_store.py, app/core/supabase.py, app/embeddings.py and app/embeddings_with_voyage.py
+"""Tests for app/core/supabase.py, app/rag/ingest/index.py, embeddings.py and embeddings_with_voyage.py
 
 No real network calls are made. A small fake stands in for Supabase and for Voyage.
 """

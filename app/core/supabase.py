@@ -60,6 +60,19 @@ def read_rows(table_name, params, action_description):
     return response.json()
 
 
+def flatten_role(row):
+    """PostgREST sends the embedded login as a dictionary or a list. We want row["role"] (or None).
+
+    A response-shape fix, not a rule about salaries or people, so it lives here with the
+    rest of the PostgREST plumbing.
+    """
+    login = row.pop("employee_auth", None)
+    if isinstance(login, list):
+        login = login[0] if login else None
+    row["role"] = login["role"] if login else None
+    return row
+
+
 def call_database_function(function_name, arguments):
     """Run a function stored in the database (created in sql/02_hybrid_search_function.sql)."""
     supabase_url = get_required_setting("SUPABASE_URL").rstrip("/")
