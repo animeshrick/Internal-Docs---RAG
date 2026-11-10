@@ -6,7 +6,7 @@ This file only talks to the database. The login rules (passwords, lockout, token
 """
 import requests
 
-from supabase_store import REQUEST_TIMEOUT_SECONDS, ROWS_PER_PAGE, build_headers, check_response, get_table_url
+from app.core.supabase import build_headers, check_response, get_table_url, REQUEST_TIMEOUT_SECONDS, ROWS_PER_PAGE
 
 EMPLOYEE_TABLE_NAME = "employee"
 AUTH_TABLE_NAME = "employee_auth"

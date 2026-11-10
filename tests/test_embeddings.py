@@ -1,4 +1,4 @@
-"""Tests for app/supabase_store.py, app/embeddings.py and app/embeddings_with_voyage.py
+"""Tests for app/supabase_store.py, app/core/supabase.py, app/embeddings.py and app/embeddings_with_voyage.py
 
 No real network calls are made. A small fake stands in for Supabase and for Voyage.
 """
@@ -9,6 +9,8 @@ import pytest
 import embeddings
 import embeddings_with_voyage
 import supabase_store
+
+from app.core import supabase as core_supabase
 
 
 # ---------------------------------------------------------------- fakes
@@ -102,7 +104,7 @@ def test_load_chunks_rejects_duplicate_ids(tmp_path):
 
 def test_get_required_setting_stops_when_missing(monkeypatch):
     monkeypatch.delenv("SOME_MISSING_SETTING", raising=False)
-    from config import get_required_setting
+    from app.core.config import get_required_setting
     with pytest.raises(RuntimeError):
         get_required_setting("SOME_MISSING_SETTING")
 
@@ -410,7 +412,7 @@ def test_database_function_call_goes_to_the_rpc_address(monkeypatch):
         sent["url"], sent["body"] = url, json.loads(data)
         return FakeResponse(json_data=[])
 
-    monkeypatch.setattr(supabase_store.requests, "post", fake_post)
-    supabase_store.call_database_function("hybrid_search_hr_chunks", {"query_text": "leave"})
+    monkeypatch.setattr(core_supabase.requests, "post", fake_post)
+    core_supabase.call_database_function("hybrid_search_hr_chunks", {"query_text": "leave"})
     assert sent["url"] == "https://example.supabase.co/rest/v1/rpc/hybrid_search_hr_chunks"
     assert sent["body"] == {"query_text": "leave"}

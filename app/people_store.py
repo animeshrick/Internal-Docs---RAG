@@ -4,7 +4,7 @@ Only database access is here. Who may see whom is decided in people_service.py.
 """
 import re
 
-from leave_store import read_rows
+from app.core.supabase import read_rows
 from payroll_store import flatten_role
 
 PROFILE_COLUMNS = ("id,emp_id,full_name,email,phone,dept,dob,doj,gender,manager_id,is_active,is_confidential,"

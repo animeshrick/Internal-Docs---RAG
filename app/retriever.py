@@ -13,7 +13,7 @@ Try it from the terminal:
 import sys
 
 from embeddings import embed_one_text
-from supabase_store import call_database_function
+from app.core.supabase import call_database_function
 
 DEFAULT_NUMBER_OF_RESULTS = 5
 # Chosen with the evaluation sweep (python app/evaluation.py --sweep):

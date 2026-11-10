@@ -24,7 +24,7 @@ import leave_store
 import payroll_service
 import people_service
 import people_store
-from config import get_required_setting
+from app.core.config import get_required_setting
 from leave_service import LeaveError
 from llm import (
     ANSWER_MAX_TOKENS, ANSWER_MODEL_NAME, ANSWER_SYSTEM_PROMPT, CITATION_PATTERN, GROQ_API_URL, MAXIMUM_ATTEMPTS,

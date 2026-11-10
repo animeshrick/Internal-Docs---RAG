@@ -8,8 +8,8 @@ from urllib.parse import quote
 
 import requests
 
-from config import get_required_setting
-from supabase_store import REQUEST_TIMEOUT_SECONDS, build_headers, check_response
+from app.core.config import get_required_setting
+from app.core.supabase import build_headers, check_response, REQUEST_TIMEOUT_SECONDS
 
 LEAVE_DOCUMENTS_BUCKET = "leave-documents"
 SIGNED_LINK_SECONDS = 300

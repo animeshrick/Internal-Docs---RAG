@@ -5,12 +5,10 @@ Secrets (API keys) are read from the .env file in the project root.
 The .env file is listed in .gitignore, so it is never committed.
 """
 import os
-from pathlib import Path
 
 from dotenv import load_dotenv
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-CHUNKS_FILE_PATH = PROJECT_ROOT / "data" / "parsed" / "chunks.jsonl"
+from app.core.paths import CHUNKS_FILE_PATH, PROJECT_ROOT  # noqa: F401  (re-exported for callers)
 
 # Read the .env file once, when this module is first imported.
 load_dotenv(PROJECT_ROOT / ".env")

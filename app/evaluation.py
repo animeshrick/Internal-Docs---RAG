@@ -17,7 +17,7 @@ Scores:
 import json
 from collections import defaultdict
 
-from config import PROJECT_ROOT
+from app.core.config import PROJECT_ROOT
 
 QUESTIONS_FILE_PATH = PROJECT_ROOT / "eval" / "questions.json"
 RESULTS_FILE_PATH = PROJECT_ROOT / "eval" / "results.json"

@@ -6,7 +6,7 @@ The leave rules (how many days, who can approve ...) are in leave_service.py.
 """
 import requests
 
-from supabase_store import REQUEST_TIMEOUT_SECONDS, build_headers, call_database_function, check_response, get_table_url
+from app.core.supabase import build_headers, call_database_function, check_response, get_table_url, REQUEST_TIMEOUT_SECONDS
 
 EMPLOYEE_TABLE_NAME = "employee"
 LEAVE_TYPES_TABLE_NAME = "leave_types"
@@ -19,13 +19,6 @@ DEFAULT_NUMBER_OF_LEAVES_TO_LIST = 20
 
 class LeaveOverlapError(Exception):
     """The database refused a leave because it overlaps another pending or approved leave of the same person."""
-
-
-def read_rows(table_name, params, action_description):
-    """GET rows from a table. The filter values travel in "params", so requests encodes them safely."""
-    response = requests.get(get_table_url(table_name), headers=build_headers(), params=params, timeout=REQUEST_TIMEOUT_SECONDS)
-    check_response(response, action_description)
-    return response.json()
 
 
 # ------------------------------------------------------------------ employees

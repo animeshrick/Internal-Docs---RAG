@@ -18,8 +18,9 @@ import time
 
 import requests
 
-from config import get_required_setting
-from supabase_store import REQUEST_TIMEOUT_SECONDS, build_headers, check_response, ingest
+from app.core.config import get_required_setting
+from app.core.supabase import build_headers, check_response, REQUEST_TIMEOUT_SECONDS
+from supabase_store import ingest
 
 TABLE_NAME = "hr_chunks"
 EMBEDDING_MODEL_NAME = "supabase-gte-small"

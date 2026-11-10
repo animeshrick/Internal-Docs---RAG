@@ -4,8 +4,7 @@ Only the database access is here. Who may see what is decided in payroll_service
 """
 import requests
 
-from leave_store import read_rows
-from supabase_store import REQUEST_TIMEOUT_SECONDS, build_headers, check_response, get_table_url
+from app.core.supabase import REQUEST_TIMEOUT_SECONDS, build_headers, check_response, get_table_url, read_rows
 
 SALARY_COLUMNS = "id,emp_id,full_name,dept,salary,employee_auth(role)"
 CEO_NAMES = ("ceo", "the ceo", "chief executive officer")

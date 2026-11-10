@@ -18,7 +18,7 @@ import time
 
 import requests
 
-from config import get_required_setting
+from app.core.config import get_required_setting
 from retriever import search_chunks
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"

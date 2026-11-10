@@ -1,8 +1,8 @@
 """
-supabase_store.py - the part of ingestion that is the same for every embedding model.
+index.py - writing chunks and their vectors into Supabase.
 
-It talks to Supabase through its REST API (PostgREST) using the plain "requests" library,
-so there is no extra Supabase package to install.
+The generic PostgREST plumbing lives in app/core/supabase.py; this module is the
+part that knows about chunks.
 
 The main function is ingest(). It does this:
     1. read chunks.jsonl
@@ -15,42 +15,16 @@ import json
 
 import requests
 
-from config import CHUNKS_FILE_PATH, get_required_setting
-
-REQUEST_TIMEOUT_SECONDS = 60
-ROWS_PER_PAGE = 1000          # Supabase returns at most 1000 rows per request
-IDS_PER_DELETE_REQUEST = 50   # keeps the delete URL short
-
-
-# ------------------------------------------------------------------ small helpers
-def build_headers(extra_headers=None):
-    """Headers that every Supabase request needs."""
-    secret_key = get_required_setting("SUPABASE_SECRET_KEY")
-    # The new secret keys (sb_secret_...) are not JWTs, so Supabase wants them in the "apikey" header only.
-    headers = {"apikey": secret_key, "Content-Type": "application/json"}
-    if not secret_key.startswith("sb_"):
-        # An old-style service_role key is a JWT and is also sent as a Bearer token.
-        headers["Authorization"] = f"Bearer {secret_key}"
-    if extra_headers:
-        headers.update(extra_headers)
-    return headers
-
-
-def get_table_url(table_name):
-    supabase_url = get_required_setting("SUPABASE_URL").rstrip("/")
-    return f"{supabase_url}/rest/v1/{table_name}"
-
-
-def check_response(response, action_description):
-    """Stop with a readable error if Supabase answered with a failure code."""
-    if not response.ok:
-        raise RuntimeError(f"{action_description} failed ({response.status_code}): {response.text[:500]}")
-
-
-def split_into_batches(items, batch_size):
-    """[1,2,3,4,5] with batch_size 2 -> [[1,2],[3,4],[5]]"""
-    return [items[start:start + batch_size] for start in range(0, len(items), batch_size)]
-
+from app.core.config import CHUNKS_FILE_PATH
+from app.core.supabase import (
+    IDS_PER_DELETE_REQUEST,
+    REQUEST_TIMEOUT_SECONDS,
+    ROWS_PER_PAGE,
+    build_headers,
+    check_response,
+    get_table_url,
+    split_into_batches,
+)
 
 # ------------------------------------------------------------------ reading
 def load_chunks(chunks_file_path=CHUNKS_FILE_PATH):
@@ -98,19 +72,6 @@ def count_rows(table_name):
     check_response(response, "Counting rows")
     # The answer looks like "0-0/176"; the number after the slash is the total.
     return int(response.headers["Content-Range"].split("/")[1])
-
-
-def call_database_function(function_name, arguments):
-    """Run a function stored in the database (created in sql/02_hybrid_search_function.sql)."""
-    supabase_url = get_required_setting("SUPABASE_URL").rstrip("/")
-    response = requests.post(
-        f"{supabase_url}/rest/v1/rpc/{function_name}",
-        headers=build_headers(),
-        data=json.dumps(arguments),
-        timeout=REQUEST_TIMEOUT_SECONDS,
-    )
-    check_response(response, f"Calling the database function {function_name}")
-    return response.json()
 
 
 # ------------------------------------------------------------------ deciding what to do

@@ -9,8 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 import requests
 
-from leave_store import read_rows
-from supabase_store import REQUEST_TIMEOUT_SECONDS, build_headers, check_response, get_table_url
+from app.core.supabase import REQUEST_TIMEOUT_SECONDS, build_headers, check_response, get_table_url, read_rows
 
 CHAT_MESSAGES_TABLE_NAME = "chat_messages"
 RETENTION_DAYS = 30

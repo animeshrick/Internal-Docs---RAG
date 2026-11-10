@@ -20,7 +20,7 @@ import bcrypt
 import jwt
 
 import employee_store
-from config import get_required_setting
+from app.core.config import get_required_setting
 
 ALLOWED_ROLES = ("employee", "hr", "ceo", "pm")      # pm = project manager: approves leave, but has no HR powers
 
