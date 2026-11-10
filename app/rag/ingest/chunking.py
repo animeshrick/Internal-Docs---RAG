@@ -1,5 +1,5 @@
 """
-chunking.py - turn parsed documents (parsing_v2.parse_docx output) into chunks.
+chunking.py - turn parsed documents (rag.ingest.parsing.parse_docx output) into chunks.
 
 Method: structure-aware. Blocks are grouped by top-level section and packed up
 to CONFIG["max_tokens"]. Tables are their own chunks. A block is only split
@@ -15,7 +15,7 @@ import json
 import re
 from itertools import groupby
 
-from parsing_v2 import chunk_metadata
+from app.rag.ingest.parsing import chunk_metadata
 
 CONFIG = {
     "max_tokens": 450,                 # cap per chunk (approximate tokens)
@@ -259,11 +259,11 @@ def write_jsonl(chunks, path):
 if __name__ == "__main__":
     import collections
     import statistics
-    from pathlib import Path
-    from parsing_v2 import parse_folder
 
-    root = Path(__file__).resolve().parent.parent
-    docs, _ = parse_folder(root / "data" / "raw")
+    from app.core.paths import CHUNKS_FILE_PATH, RAW_DOCS_DIR
+    from app.rag.ingest.parsing import parse_folder
+
+    docs, _ = parse_folder(RAW_DOCS_DIR)
     chunks, skipped = chunk_all(docs)
     print(f"\n{len(chunks)} chunks from {len(docs) - len(skipped)} documents; skipped: {skipped or 'none'}")
     per = collections.Counter(c["metadata"]["doc_id"] for c in chunks)
@@ -273,6 +273,6 @@ if __name__ == "__main__":
     print(f"tokens per chunk: min {min(sizes)}, median {int(statistics.median(sizes))}, max {max(sizes)}")
     problems = check_chunks(docs, chunks)
     print("problems:", problems or "none")
-    out = root / "data" / "parsed" / "chunks.jsonl"
-    write_jsonl(chunks, out)
-    print("written:", out)
+    CHUNKS_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    write_jsonl(chunks, CHUNKS_FILE_PATH)
+    print("written:", CHUNKS_FILE_PATH)

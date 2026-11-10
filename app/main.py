@@ -48,7 +48,7 @@ import leave_store
 import payroll_service
 import payroll_store
 import storage_store
-from assistant import answer_chat_message
+from app.rag.answer.assistant import answer_chat_message
 import chat_store
 import people_service
 from auth import AuthError

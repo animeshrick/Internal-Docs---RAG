@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-import assistant
+from app.rag.answer import assistant as assistant
 import people_service
 import people_store
 

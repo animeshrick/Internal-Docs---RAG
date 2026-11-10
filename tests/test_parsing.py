@@ -4,7 +4,7 @@ from docx import Document
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
-from app.parsing_v2 import (
+from app.rag.ingest.parsing import (
     DOC_ID_RE,
     NUMBERED_RE,
     chunk_metadata,

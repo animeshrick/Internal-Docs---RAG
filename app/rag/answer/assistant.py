@@ -26,12 +26,8 @@ import people_service
 import people_store
 from app.core.config import get_required_setting
 from leave_service import LeaveError
-from llm import (
-    ANSWER_MAX_TOKENS, ANSWER_MODEL_NAME, ANSWER_SYSTEM_PROMPT, CITATION_PATTERN, GROQ_API_URL, MAXIMUM_ATTEMPTS,
-    NUMBER_OF_CHUNKS_FOR_ANSWER, REASONING_EFFORT, REQUEST_TIMEOUT_SECONDS, RETRY_STATUS_CODES,
-    SECONDS_TO_WAIT_BEFORE_RETRY, answer_question, build_context, call_groq, clean_answer_text, find_cited_sources,
-)
-from retriever import search_chunks
+from app.rag.answer.llm import ANSWER_MAX_TOKENS, ANSWER_MODEL_NAME, ANSWER_SYSTEM_PROMPT, CITATION_PATTERN, GROQ_API_URL, MAXIMUM_ATTEMPTS, NUMBER_OF_CHUNKS_FOR_ANSWER, REASONING_EFFORT, REQUEST_TIMEOUT_SECONDS, RETRY_STATUS_CODES, SECONDS_TO_WAIT_BEFORE_RETRY, answer_question, build_context, call_groq, clean_answer_text, find_cited_sources
+from app.rag.answer.retriever import search_chunks
 
 ROUTER_MAX_TOKENS = 800
 

@@ -2,7 +2,7 @@
 import pytest
 import requests
 
-import llm
+from app.rag.answer import llm as llm
 
 
 class FakeResponse:

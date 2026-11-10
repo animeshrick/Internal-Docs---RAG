@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-import assistant
+from app.rag.answer import assistant as assistant
 import leave_service
 from fakes import FakeDatabase
 

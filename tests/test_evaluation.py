@@ -1,7 +1,7 @@
 """Tests for app/evaluation.py and for the question file eval/questions.json"""
 import json
 
-import evaluation
+from app.rag.eval import evaluation as evaluation
 
 
 # ---------------------------------------------------------------- finding the first hit

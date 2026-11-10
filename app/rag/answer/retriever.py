@@ -12,7 +12,7 @@ Try it from the terminal:
 """
 import sys
 
-from embeddings import embed_one_text
+from app.rag.ingest.embeddings import embed_one_text
 from app.core.supabase import call_database_function
 
 DEFAULT_NUMBER_OF_RESULTS = 5

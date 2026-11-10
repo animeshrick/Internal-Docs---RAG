@@ -5,7 +5,7 @@ from datetime import date
 import pytest
 from fastapi.testclient import TestClient
 
-import assistant
+from app.rag.answer import assistant as assistant
 import main
 import payroll_service
 import payroll_store

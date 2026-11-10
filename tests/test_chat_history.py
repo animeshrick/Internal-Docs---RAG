@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 
-import assistant
+from app.rag.answer import assistant as assistant
 import chat_store
 import main
 

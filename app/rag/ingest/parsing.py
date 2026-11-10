@@ -1,5 +1,5 @@
 """
-parsing_v2.py - read HR .docx files into ordered, labelled blocks plus
+parsing.py - read HR .docx files into ordered, labelled blocks plus
 document-level metadata.
 
 parse_docx(doc, name)  -> one dict per document (metadata + blocks)
@@ -300,8 +300,9 @@ def validate(info):
 
 if __name__ == "__main__":
     import collections
-    raw = Path(__file__).resolve().parent.parent / "data" / "raw"
-    docs, skipped = parse_folder(raw)
+    from app.core.paths import RAW_DOCS_DIR
+
+    docs, skipped = parse_folder(RAW_DOCS_DIR)
     for d in docs:
         counts = dict(collections.Counter(b["type"] for b in d["blocks"]))
         print(f"\n{d['source']}  [{d['doc_id']} | {d['doc_type']} | v{d['version']} | "

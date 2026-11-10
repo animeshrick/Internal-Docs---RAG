@@ -103,8 +103,8 @@ def make_search_function(keyword_weight, semantic_weight, question_vectors_by_te
 
 def run_weight_sweep():
     """Try several keyword/semantic weights and print one line of scores for each."""
-    from embeddings import embed_one_text
-    from retriever import search_chunks_with_vector
+    from app.rag.ingest.embeddings import embed_one_text
+    from app.rag.answer.retriever import search_chunks_with_vector
 
     questions = load_questions()
     print("Embedding each question once...")
@@ -135,7 +135,7 @@ if __name__ == "__main__":
         run_weight_sweep()
         sys.exit()
 
-    from retriever import search_chunks
+    from app.rag.answer.retriever import search_chunks
 
     question_results = run_evaluation(search_chunks)
 

@@ -19,7 +19,7 @@ import time
 import requests
 
 from app.core.config import get_required_setting
-from retriever import search_chunks
+from app.rag.answer.retriever import search_chunks
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 # Model names can be changed in .env without touching the code (check the current list in the Groq console).

@@ -13,7 +13,7 @@ RAW_FOLDER = PROJECT_ROOT / "data" / "raw"
 sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "app"))   # TEMPORARY: bare "import leave_store" in old tests
 
-from app.parsing_v2 import parse_folder  # noqa: E402
+from app.rag.ingest.parsing import parse_folder  # noqa: E402
 
 
 @pytest.fixture(scope="session")

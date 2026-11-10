@@ -20,7 +20,7 @@ import requests
 
 from app.core.config import get_required_setting
 from app.core.supabase import build_headers, check_response, REQUEST_TIMEOUT_SECONDS
-from supabase_store import ingest
+from app.rag.ingest.index import ingest
 
 TABLE_NAME = "hr_chunks"
 EMBEDDING_MODEL_NAME = "supabase-gte-small"

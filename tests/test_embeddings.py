@@ -6,9 +6,9 @@ import json
 
 import pytest
 
-import embeddings
-import embeddings_with_voyage
-import supabase_store
+from app.rag.ingest import embeddings as embeddings
+from app.rag.ingest import embeddings_with_voyage as embeddings_with_voyage
+from app.rag.ingest import index as supabase_store
 
 from app.core import supabase as core_supabase
 
@@ -355,7 +355,7 @@ def test_old_service_role_key_is_also_sent_as_bearer_token(monkeypatch):
 
 
 # ---------------------------------------------------------------- retriever.py
-import retriever  # noqa: E402
+from app.rag.answer import retriever as retriever  # noqa: E402
 
 
 def make_database_row(chunk_id, keyword_rank, semantic_rank):
