@@ -1,0 +1,920 @@
+[
+  {
+    "id": 1,
+    "question": "How many casual leaves do I get in a year?",
+    "kind": "number",
+    "expected_sections": [
+      "HR-LEAVE-001#policy-at-a-glance",
+      "HR-LEAVE-001#3-leave-types-and-limits"
+    ],
+    "returned_chunk_ids": [
+      "HR-LEAVE-001#2-leave-year-and-eligibility#00",
+      "HR-LEAVE-001#policy-at-a-glance#00",
+      "HR-LEAVE-001#3-leave-types-and-limits#00",
+      "HR-LEAVE-001#6-carry-forward-cash-payment-and-separat#00",
+      "HR-LEAVE-001#5-holidays-half-days-and-overlap#00"
+    ],
+    "first_hit_position": 2,
+    "top_score": 0.0388386123680241,
+    "top_similarity": 0.805077672761341
+  },
+  {
+    "id": 2,
+    "question": "How many sick leaves can I carry forward?",
+    "kind": "number",
+    "expected_sections": [
+      "HR-LEAVE-001#policy-at-a-glance",
+      "HR-LEAVE-001#3-leave-types-and-limits",
+      "HR-LEAVE-001#6-carry-forward"
+    ],
+    "returned_chunk_ids": [
+      "HR-LEAVE-001#6-carry-forward-cash-payment-and-separat#00",
+      "HR-LEAVE-001#3-leave-types-and-limits#00",
+      "HR-LEAVE-001#policy-at-a-glance#00",
+      "HR-GOV-000#4-legal-alignment-notes-as-of-2026-10-28#00",
+      "HR-LEAVE-001#4-request-and-approval#00"
+    ],
+    "first_hit_position": 1,
+    "top_score": 0.0388386123680241,
+    "top_similarity": 0.823063590891791
+  },
+  {
+    "id": 3,
+    "question": "What is the maximum annual leave I can carry forward?",
+    "kind": "number",
+    "expected_sections": [
+      "HR-LEAVE-001#6-carry-forward"
+    ],
+    "returned_chunk_ids": [
+      "HR-LEAVE-001#6-carry-forward-cash-payment-and-separat#00",
+      "HR-LEAVE-001#3-leave-types-and-limits#00",
+      "HR-LEAVE-001#policy-at-a-glance#00",
+      "HR-LEAVE-001#2-leave-year-and-eligibility#00",
+      "HR-LEAVE-001#5-holidays-half-days-and-overlap#00"
+    ],
+    "first_hit_position": 1,
+    "top_score": 0.0388386123680241,
+    "top_similarity": 0.898738828263844
+  },
+  {
+    "id": 4,
+    "question": "Do I get leave when I get married?",
+    "kind": "policy",
+    "expected_sections": [
+      "HR-LEAVE-001#3-leave-types-and-limits"
+    ],
+    "returned_chunk_ids": [
+      "HR-LEAVE-001#2-leave-year-and-eligibility#00",
+      "HR-LEAVE-001#6-carry-forward-cash-payment-and-separat#00",
+      "HR-LEAVE-001#3-leave-types-and-limits#01",
+      "HR-LEAVE-001#5-holidays-half-days-and-overlap#00",
+      "HR-LEAVE-001#3-leave-types-and-limits#00"
+    ],
+    "first_hit_position": 3,
+    "top_score": 0.0388386123680241,
+    "top_similarity": 0.836945062420536
+  },
+  {
+    "id": 5,
+    "question": "Where do I apply for leave?",
+    "kind": "policy",
+    "expected_sections": [
+      "HR-LEAVE-001#4-request-and-approval"
+    ],
+    "returned_chunk_ids": [
+      "HR-LEAVE-001#2-leave-year-and-eligibility#00",
+      "HR-LEAVE-001#4-request-and-approval#00",
+      "HR-LEAVE-001#6-carry-forward-cash-payment-and-separat#00",
+      "HR-LEAVE-001#3-leave-types-and-limits#00",
+      "HR-LEAVE-001#policy-at-a-glance#00"
+    ],
+    "first_hit_position": 2,
+    "top_score": 0.0388386123680241,
+    "top_similarity": 0.857174115524381
+  },
+  {
+    "id": 6,
+    "question": "When do I need a medical certificate for sick leave?",
+    "kind": "policy",
+    "expected_sections": [
+      "HR-LEAVE-001#4-request-and-approval"
+    ],
+    "returned_chunk_ids": [
+      "HR-LEAVE-001#2-leave-year-and-eligibility#00",
+      "HR-LEAVE-001#4-request-and-approval#00",
+      "HR-LEAVE-001#3-leave-types-and-limits#00",
+      "HR-LEAVE-001#policy-at-a-glance#00",
+      "HR-GOV-000#4-legal-alignment-notes-as-of-2026-10-28#00"
+    ],
+    "first_hit_position": 2,
+    "top_score": 0.0377896613190731,
+    "top_similarity": 0.830453400381425
+  },
+  {
+    "id": 7,
+    "question": "How many days off do I get for a wedding?",
+    "kind": "paraphrase",
+    "expected_sections": [
+      "HR-LEAVE-001#3-leave-types-and-limits"
+    ],
+    "returned_chunk_ids": [
+      "HR-LEAVE-001#5-holidays-half-days-and-overlap#00",
+      "HR-LEAVE-001#3-leave-types-and-limits#00",
+      "HR-LEAVE-001#policy-at-a-glance#00",
+      "HR-LEAVE-001#4-request-and-approval#00",
+      "HR-EXIT-003#policy-at-a-glance#00"
+    ],
+    "first_hit_position": 2,
+    "top_score": 0.0380986937590711,
+    "top_similarity": 0.82973343133927
+  },
+  {
+    "id": 8,
+    "question": "Can I get money for my unused leave when I quit?",
+    "kind": "paraphrase",
+    "expected_sections": [
+      "HR-LEAVE-001#6-carry-forward"
+    ],
+    "returned_chunk_ids": [
+      "HR-LEAVE-001#3-leave-types-and-limits#00",
+      "HR-LEAVE-001#6-carry-forward-cash-payment-and-separat#00",
+      "HR-LEAVE-001#2-leave-year-and-eligibility#00",
+      "HR-EXIT-003#4-full-and-final-calculation#00",
+      "HR-LEAVE-001#policy-at-a-glance#00"
+    ],
+    "first_hit_position": 2,
+    "top_score": 0.0388386123680241,
+    "top_similarity": 0.841228450573348
+  },
+  {
+    "id": 9,
+    "question": "What is the notice period after confirmation?",
+    "kind": "number",
+    "expected_sections": [
+      "HR-EXIT-003#policy-at-a-glance",
+      "HR-EXIT-003#2-resignation-and-notice"
+    ],
+    "returned_chunk_ids": [
+      "HR-EXIT-003#2-resignation-and-notice#00",
+      "HR-LIFE-005#3-confirmation-and-role-changes#00",
+      "HR-EXIT-003#policy-at-a-glance#00",
+      "HR-LIFE-005#2-probation-process#00",
+      "HR-LIFE-005#policy-at-a-glance#00"
+    ],
+    "first_hit_position": 1,
+    "top_score": 0.0384757676655568,
+    "top_similarity": 0.866520889608821
+  },
+  {
+    "id": 10,
+    "question": "What is the notice period during probation?",
+    "kind": "number",
+    "expected_sections": [
+      "HR-EXIT-003#policy-at-a-glance",
+      "HR-EXIT-003#2-resignation-and-notice"
+    ],
+    "returned_chunk_ids": [
+      "HR-LIFE-005#2-probation-process#00",
+      "HR-EXIT-003#2-resignation-and-notice#00",
+      "HR-EXIT-003#policy-at-a-glance#00",
+      "HR-LEAVE-001#2-leave-year-and-eligibility#00",
+      "HR-LIFE-005#policy-at-a-glance#00"
+    ],
+    "first_hit_position": 2,
+    "top_score": 0.0384615384615385,
+    "top_similarity": 0.887141936251042
+  },
+  {
+    "id": 11,
+    "question": "How soon will my final wages be paid after I resign?",
+    "kind": "number",
+    "expected_sections": [
+      "HR-EXIT-003#policy-at-a-glance",
+      "HR-EXIT-003#4-full-and-final-calculation"
+    ],
+    "returned_chunk_ids": [
+      "HR-EXIT-003#4-full-and-final-calculation#00",
+      "HR-EXIT-003#policy-at-a-glance#00",
+      "HR-EXIT-003#1-policy-principles#00",
+      "HR-EXIT-003#4-full-and-final-calculation#01",
+      "HR-EXIT-003#2-resignation-and-notice#00"
+    ],
+    "first_hit_position": 1,
+    "top_score": 0.0384615384615385,
+    "top_similarity": 0.875532150268555
+  },
+  {
+    "id": 12,
+    "question": "Who do I email if my full and final settlement looks wrong?",
+    "kind": "keyword",
+    "expected_sections": [
+      "HR-EXIT-003#7-employee-settlement-dispute-channel"
+    ],
+    "returned_chunk_ids": [
+      "HR-EXIT-003#4-full-and-final-calculation#01",
+      "HR-EXIT-003#7-employee-settlement-dispute-channel#00",
+      "HR-EXIT-003#2-resignation-and-notice#00",
+      "HR-EXIT-003#policy-at-a-glance#00",
+      "HR-EXIT-003#1-policy-principles#00"
+    ],
+    "first_hit_position": 2,
+    "top_score": 0.0384757676655568,
+    "top_similarity": 0.844754118352637
+  },
+  {
+    "id": 13,
+    "question": "Will my settlement be held until I finish clearance?",
+    "kind": "paraphrase",
+    "expected_sections": [
+      "HR-EXIT-003#4-full-and-final-calculation",
+      "HR-FORM-012#form-5-exit-clearance-checklist",
+      "HR-GOV-000#4-legal-alignment"
+    ],
+    "returned_chunk_ids": [
+      "HR-EXIT-003#5-administrative-timeline-and-accountabi#00",
+      "HR-FORM-012#form-5-exit-clearance-checklist#01",
+      "HR-EXIT-003#7-employee-settlement-dispute-channel#00",
+      "HR-EXIT-003#1-policy-principles#00",
+      "HR-EXIT-003#4-full-and-final-calculation#01"
+    ],
+    "first_hit_position": 2,
+    "top_score": 0.0377896613190731,
+    "top_similarity": 0.85062616173185
+  },
+  {
+    "id": 14,
+    "question": "What should I do with my laptop when I leave the company?",
+    "kind": "paraphrase",
+    "expected_sections": [
+      "HR-EXIT-003#6-controls-and-data-security",
+      "FIN-ADMIN-011#4-technology-and-physical-assets",
+      "HR-FORM-012#form-7-company-asset-handover"
+    ],
+    "returned_chunk_ids": [
+      "HR-LEAVE-001#6-carry-forward-cash-payment-and-separat#00",
+      "HR-LEAVE-001#2-leave-year-and-eligibility#00",
+      "HR-LEAVE-001#7-roles-controls-and-exceptions#00",
+      "HR-FORM-012#form-1-leave-request#00",
+      "FIN-ADMIN-011#4-technology-and-physical-assets#00"
+    ],
+    "first_hit_position": 5,
+    "top_score": 0.0364117841774247,
+    "top_similarity": 0.811344599385724
+  },
+  {
+    "id": 15,
+    "question": "What are the standard office hours?",
+    "kind": "number",
+    "expected_sections": [
+      "HR-WORK-004#policy-at-a-glance",
+      "HR-WORK-004#1-work-arrangements"
+    ],
+    "returned_chunk_ids": [
+      "HR-WORK-004#policy-at-a-glance#00",
+      "HR-WORK-004#1-work-arrangements#00",
+      "HR-GOV-000#3-operational-configuration-register#00",
+      "HR-WORK-004#4-time-off-overtime-and-support#00",
+      "HR-EXIT-003#policy-at-a-glance#00"
+    ],
+    "first_hit_position": 1,
+    "top_score": 0.0392156862745098,
+    "top_similarity": 0.871251072622868
+  },
+  {
+    "id": 16,
+    "question": "Can I work from home and what are the rules?",
+    "kind": "paraphrase",
+    "expected_sections": [
+      "HR-WORK-004#3-remote-work-standards",
+      "HR-WORK-004#1-work-arrangements"
+    ],
+    "returned_chunk_ids": [
+      "HR-WORK-004#1-work-arrangements#00",
+      "HR-WORK-004#3-remote-work-standards#00",
+      "HR-LEAVE-001#3-leave-types-and-limits#00",
+      "HR-WORK-004#2-attendance-recording#00",
+      "HR-POSH-007#1-zero-tolerance-and-legal-framework#00"
+    ],
+    "first_hit_position": 1,
+    "top_score": 0.0384615384615385,
+    "top_similarity": 0.836922228336334
+  },
+  {
+    "id": 17,
+    "question": "How is my attendance recorded?",
+    "kind": "policy",
+    "expected_sections": [
+      "HR-WORK-004#2-attendance-recording"
+    ],
+    "returned_chunk_ids": [
+      "HR-WORK-004#2-attendance-recording#00",
+      "HR-PAY-009#4-employee-records-and-privacy#00",
+      "HR-FORM-012#form-9-employee-policy-acknowledgment#00",
+      "HR-WORK-004#4-time-off-overtime-and-support#00",
+      "HR-WORK-004#5-breach-and-exceptions#00"
+    ],
+    "first_hit_position": 1,
+    "top_score": 0.0392156862745098,
+    "top_similarity": 0.881970233799803
+  },
+  {
+    "id": 18,
+    "question": "How long is the probation period?",
+    "kind": "number",
+    "expected_sections": [
+      "HR-LIFE-005#policy-at-a-glance",
+      "HR-LIFE-005#2-probation-process"
+    ],
+    "returned_chunk_ids": [
+      "HR-LIFE-005#2-probation-process#00",
+      "HR-LIFE-005#policy-at-a-glance#00",
+      "HR-LEAVE-001#2-leave-year-and-eligibility#00",
+      "HR-LIFE-005#1-purpose#00",
+      "HR-LIFE-005#4-separation-benefits-and-files#00"
+    ],
+    "first_hit_position": 1,
+    "top_score": 0.0384615384615385,
+    "top_similarity": 0.898179233074195
+  },
+  {
+    "id": 19,
+    "question": "Is my confirmation automatic after probation ends?",
+    "kind": "policy",
+    "expected_sections": [
+      "HR-LIFE-005#3-confirmation-and-role-changes"
+    ],
+    "returned_chunk_ids": [
+      "HR-LIFE-005#3-confirmation-and-role-changes#00",
+      "HR-LIFE-005#policy-at-a-glance#00",
+      "HR-LIFE-005#2-probation-process#00",
+      "HR-LIFE-005#4-separation-benefits-and-files#00",
+      "HR-EXIT-003#2-resignation-and-notice#00"
+    ],
+    "first_hit_position": 1,
+    "top_score": 0.0392156862745098,
+    "top_similarity": 0.885662462880089
+  },
+  {
+    "id": 20,
+    "question": "When does the appraisal cycle start and end?",
+    "kind": "number",
+    "expected_sections": [
+      "HR-COMP-002#policy-at-a-glance",
+      "HR-COMP-002#2-annual-operating-cycle"
+    ],
+    "returned_chunk_ids": [
+      "HR-COMP-002#policy-at-a-glance#00",
+      "HR-COMP-002#5-annual-increment-guidelines#00",
+      "HR-COMP-002#3-eligibility-and-exceptions#00",
+      "HR-FORM-012#form-2-performance-appraisal#00",
+      "HR-PAY-009#2-payroll-cycle-and-corrections#00"
+    ],
+    "first_hit_position": 1,
+    "top_score": 0.0388386123680241,
+    "top_similarity": 0.908477122096844
+  },
+  {
+    "id": 21,
+    "question": "What increment can I expect with a rating of 5?",
+    "kind": "number",
+    "expected_sections": [
+      "HR-COMP-002#5-annual-increment-guidelines"
+    ],
+    "returned_chunk_ids": [
+      "HR-COMP-002#5-annual-increment-guidelines#01",
+      "HR-COMP-002#4-performance-scoring#01",
+      "HR-COMP-002#5-annual-increment-guidelines#02",
+      "HR-COMP-002#1-purpose-and-principles#00",
+      "HR-COMP-002#5-annual-increment-guidelines#00"
+    ],
+    "first_hit_position": 1,
+    "top_score": 0.0392156862745098,
+    "top_similarity": 0.876015398621104
+  },
+  {
+    "id": 22,
+    "question": "Is an increment guaranteed if I get a good rating?",
+    "kind": "policy",
+    "expected_sections": [
+      "HR-COMP-002#5-annual-increment-guidelines",
+      "HR-COMP-002#1-purpose-and-principles"
+    ],
+    "returned_chunk_ids": [
+      "HR-COMP-002#5-annual-increment-guidelines#01",
+      "HR-COMP-002#1-purpose-and-principles#00",
+      "HR-COMP-002#5-annual-increment-guidelines#00",
+      "HR-COMP-002#5-annual-increment-guidelines#02",
+      "HR-COMP-002#4-performance-scoring#01"
+    ],
+    "first_hit_position": 1,
+    "top_score": 0.0384757676655568,
+    "top_similarity": 0.862281279291954
+  },
+  {
+    "id": 23,
+    "question": "How is my performance score calculated?",
+    "kind": "number",
+    "expected_sections": [
+      "HR-COMP-002#4-performance-scoring"
+    ],
+    "returned_chunk_ids": [
+      "HR-COMP-002#4-performance-scoring#01",
+      "HR-COMP-002#4-performance-scoring#00",
+      "HR-COMP-002#4-performance-scoring#02",
+      "HR-FORM-012#form-2-performance-appraisal#00",
+      "HR-COMP-002#7-development-and-record-retention#00"
+    ],
+    "first_hit_position": 1,
+    "top_score": 0.0381263616557734,
+    "top_similarity": 0.873305741344103
+  },
+  {
+    "id": 24,
+    "question": "How do I appeal my appraisal rating?",
+    "kind": "policy",
+    "expected_sections": [
+      "HR-COMP-002#6-governance-and-appeals"
+    ],
+    "returned_chunk_ids": [
+      "HR-COMP-002#6-governance-and-appeals#00",
+      "HR-FORM-012#form-2-performance-appraisal#00",
+      "HR-COMP-002#policy-at-a-glance#00",
+      "HR-COMP-002#5-annual-increment-guidelines#00",
+      "HR-COMP-002#4-performance-scoring#02"
+    ],
+    "first_hit_position": 1,
+    "top_score": 0.0377358490566038,
+    "top_similarity": 0.831155012181104
+  },
+  {
+    "id": 25,
+    "question": "Who is eligible for the yearly appraisal?",
+    "kind": "number",
+    "expected_sections": [
+      "HR-COMP-002#3-eligibility-and-exceptions"
+    ],
+    "returned_chunk_ids": [
+      "HR-COMP-002#policy-at-a-glance#00",
+      "HR-LEAVE-001#2-leave-year-and-eligibility#00",
+      "HR-COMP-002#3-eligibility-and-exceptions#00",
+      "HR-FORM-012#form-2-performance-appraisal#00",
+      "HR-COMP-002#5-annual-increment-guidelines#00"
+    ],
+    "first_hit_position": 3,
+    "top_score": 0.0381263616557734,
+    "top_similarity": 0.862105105456561
+  },
+  {
+    "id": 26,
+    "question": "When is salary credited each month?",
+    "kind": "number",
+    "expected_sections": [
+      "HR-PAY-009#policy-at-a-glance",
+      "HR-PAY-009#2-payroll-cycle-and-corrections"
+    ],
+    "returned_chunk_ids": [
+      "HR-PAY-009#1-compensation-components#00",
+      "HR-COMP-002#policy-at-a-glance#00",
+      "HR-PAY-009#policy-at-a-glance#00",
+      "HR-PAY-009#2-payroll-cycle-and-corrections#00",
+      "HR-LEAVE-001#2-leave-year-and-eligibility#00"
+    ],
+    "first_hit_position": 3,
+    "top_score": 0.0377358490566038,
+    "top_similarity": 0.847730943695848
+  },
+  {
+    "id": 27,
+    "question": "Who do I contact about a wrong amount on my payslip?",
+    "kind": "keyword",
+    "expected_sections": [
+      "HR-PAY-009#5-escalation"
+    ],
+    "returned_chunk_ids": [
+      "HR-FORM-012#form-6-full-and-final-settlement-stateme#00",
+      "HR-FORM-012#letter-3-salary-revision-communication#00",
+      "FIN-ADMIN-011#2-standard-reimbursement-limits#00",
+      "HR-PAY-009#2-payroll-cycle-and-corrections#00",
+      "HR-PAY-009#5-escalation#00"
+    ],
+    "first_hit_position": 5,
+    "top_score": 0.0377896613190731,
+    "top_similarity": 0.819261981778921
+  },
+  {
+    "id": 28,
+    "question": "Which statutory benefits like PF and ESI do I get?",
+    "kind": "keyword",
+    "expected_sections": [
+      "HR-PAY-009#3-statutory-benefits-and-insurance"
+    ],
+    "returned_chunk_ids": [
+      "HR-PAY-009#3-statutory-benefits-and-insurance#00",
+      "HR-EXIT-003#4-full-and-final-calculation#00",
+      "HR-PAY-009#policy-at-a-glance#00",
+      "HR-LEAVE-001#3-leave-types-and-limits#01",
+      "HR-POSH-007#3-complaint-support-and-inquiry#00"
+    ],
+    "first_hit_position": 1,
+    "top_score": 0.0388386123680241,
+    "top_similarity": 0.861319133835905
+  },
+  {
+    "id": 29,
+    "question": "Who can see my employee records?",
+    "kind": "policy",
+    "expected_sections": [
+      "HR-PAY-009#4-employee-records-and-privacy"
+    ],
+    "returned_chunk_ids": [
+      "HR-PAY-009#4-employee-records-and-privacy#00",
+      "HR-FORM-012#form-9-employee-policy-acknowledgment#00",
+      "HR-WORK-004#2-attendance-recording#00",
+      "HR-TALENT-010#5-candidate-and-employee-records#00",
+      "HR-PAY-009#3-statutory-benefits-and-insurance#00"
+    ],
+    "first_hit_position": 1,
+    "top_score": 0.0392156862745098,
+    "top_similarity": 0.883539571340135
+  },
+  {
+    "id": 30,
+    "question": "What is the hotel limit per night in metro cities?",
+    "kind": "number",
+    "expected_sections": [
+      "FIN-ADMIN-011#2-standard-reimbursement-limits",
+      "FIN-ADMIN-011#policy-at-a-glance"
+    ],
+    "returned_chunk_ids": [
+      "FIN-ADMIN-011#2-standard-reimbursement-limits#01",
+      "FIN-ADMIN-011#policy-at-a-glance#00",
+      "HR-WORK-004#policy-at-a-glance#00",
+      "HR-LEAVE-001#3-leave-types-and-limits#00",
+      "FIN-ADMIN-011#1-approval-and-eligible-travel#00"
+    ],
+    "first_hit_position": 1,
+    "top_score": 0.0388386123680241,
+    "top_similarity": 0.86152644707499
+  },
+  {
+    "id": 31,
+    "question": "How many days do I have to submit expense claims?",
+    "kind": "number",
+    "expected_sections": [
+      "FIN-ADMIN-011#policy-at-a-glance",
+      "FIN-ADMIN-011#3-claims-and-controls"
+    ],
+    "returned_chunk_ids": [
+      "FIN-ADMIN-011#3-claims-and-controls#00",
+      "HR-LEAVE-001#4-request-and-approval#00",
+      "FIN-ADMIN-011#policy-at-a-glance#00",
+      "FIN-ADMIN-011#2-standard-reimbursement-limits#01",
+      "FIN-ADMIN-011#2-standard-reimbursement-limits#00"
+    ],
+    "first_hit_position": 1,
+    "top_score": 0.0392156862745098,
+    "top_similarity": 0.891985476016998
+  },
+  {
+    "id": 32,
+    "question": "Do I need approval before booking business travel?",
+    "kind": "policy",
+    "expected_sections": [
+      "FIN-ADMIN-011#1-approval-and-eligible-travel",
+      "FIN-ADMIN-011#policy-at-a-glance"
+    ],
+    "returned_chunk_ids": [
+      "FIN-ADMIN-011#1-approval-and-eligible-travel#00",
+      "FIN-ADMIN-011#cto-approval-document-control#00",
+      "FIN-ADMIN-011#2-standard-reimbursement-limits#01",
+      "HR-LEAVE-001#cto-approval-document-control#00",
+      "FIN-ADMIN-011#cto-approval-document-control#01"
+    ],
+    "first_hit_position": 1,
+    "top_score": 0.0392156862745098,
+    "top_similarity": 0.933298913636772
+  },
+  {
+    "id": 33,
+    "question": "What should I do if I lose my laptop?",
+    "kind": "paraphrase",
+    "expected_sections": [
+      "IT-SEC-008#4-privacy-and-incident-response"
+    ],
+    "returned_chunk_ids": [
+      "HR-FORM-012#form-7-company-asset-handover#00",
+      "HR-FORM-012#form-5-exit-clearance-checklist#00",
+      "FIN-ADMIN-011#4-technology-and-physical-assets#00",
+      "IT-SEC-008#4-privacy-and-incident-response#00",
+      "IT-SEC-008#2-accounts-devices-and-development-pract#00"
+    ],
+    "first_hit_position": 4,
+    "top_score": 0.0380986937590711,
+    "top_similarity": 0.782529519947144
+  },
+  {
+    "id": 34,
+    "question": "Can I use ChatGPT for work?",
+    "kind": "paraphrase",
+    "expected_sections": [
+      "IT-SEC-008#3-approved-generative-ai"
+    ],
+    "returned_chunk_ids": [
+      "HR-WORK-004#3-remote-work-standards#00",
+      "HR-POSH-007#1-zero-tolerance-and-legal-framework#00",
+      "HR-WORK-004#1-work-arrangements#00",
+      "HR-ETHICS-006#2-conflicts-gifts-and-external-work#00",
+      "HR-WORK-004#2-attendance-recording#00"
+    ],
+    "first_hit_position": null,
+    "top_score": 0.0381263616557734,
+    "top_similarity": 0.823350836238316
+  },
+  {
+    "id": 35,
+    "question": "Can I upload confidential files to a public AI tool?",
+    "kind": "policy",
+    "expected_sections": [
+      "IT-SEC-008#3-approved-generative-ai",
+      "IT-SEC-008#policy-at-a-glance"
+    ],
+    "returned_chunk_ids": [
+      "IT-SEC-008#3-approved-generative-ai-and-coding-assi#00",
+      "IT-SEC-008#policy-at-a-glance#00",
+      "IT-SEC-008#1-information-classification#00",
+      "IT-SEC-008#2-accounts-devices-and-development-pract#00",
+      "ORG-CORP-001#08-governance-risk-information-security#02"
+    ],
+    "first_hit_position": 1,
+    "top_score": 0.0388386123680241,
+    "top_similarity": 0.875549793243408
+  },
+  {
+    "id": 36,
+    "question": "How should company information be classified?",
+    "kind": "policy",
+    "expected_sections": [
+      "IT-SEC-008#1-information-classification"
+    ],
+    "returned_chunk_ids": [
+      "HR-ETHICS-006#1-expected-conduct#00",
+      "IT-SEC-008#1-information-classification#00",
+      "HR-ETHICS-006#2-conflicts-gifts-and-external-work#00",
+      "ORG-CORP-001#01-corporate-identity#00",
+      "ORG-CORP-001#01-corporate-identity#01"
+    ],
+    "first_hit_position": 2,
+    "top_score": 0.0374125874125874,
+    "top_similarity": 0.829503774642944
+  },
+  {
+    "id": 37,
+    "question": "Can I accept gifts from vendors?",
+    "kind": "policy",
+    "expected_sections": [
+      "HR-ETHICS-006#2-conflicts-gifts-and-external-work"
+    ],
+    "returned_chunk_ids": [
+      "HR-ETHICS-006#2-conflicts-gifts-and-external-work#00",
+      "HR-TALENT-010#3-employee-referrals#00",
+      "ORG-CORP-001#04-department-mandates#01",
+      "HR-ETHICS-006#1-expected-conduct#00",
+      "HR-LEAVE-001#cto-approval-document-control#00"
+    ],
+    "first_hit_position": 1,
+    "top_score": 0.0392156862745098,
+    "top_similarity": 0.845105987203835
+  },
+  {
+    "id": 38,
+    "question": "Where can I report a misconduct concern?",
+    "kind": "keyword",
+    "expected_sections": [
+      "HR-ETHICS-006#3-raising-concerns"
+    ],
+    "returned_chunk_ids": [
+      "HR-ETHICS-006#3-raising-concerns#00",
+      "HR-ETHICS-006#4-investigations-discipline-and-safeguar#00",
+      "HR-POSH-007#1-zero-tolerance-and-legal-framework#00",
+      "HR-POSH-007#3-complaint-support-and-inquiry#00",
+      "HR-POSH-007#4-confidentiality-safety-and-non-retalia#00"
+    ],
+    "first_hit_position": 1,
+    "top_score": 0.0388386123680241,
+    "top_similarity": 0.875395398551647
+  },
+  {
+    "id": 39,
+    "question": "How fast will HR respond to my grievance?",
+    "kind": "number",
+    "expected_sections": [
+      "HR-ETHICS-006#policy-at-a-glance",
+      "HR-ETHICS-006#3-raising-concerns"
+    ],
+    "returned_chunk_ids": [
+      "HR-ETHICS-006#3-raising-concerns#00",
+      "HR-ETHICS-006#policy-at-a-glance#00",
+      "HR-EXIT-003#2-resignation-and-notice#00",
+      "HR-FORM-012#form-8-employee-grievance-intake#00",
+      "HR-COMP-002#6-governance-and-appeals#00"
+    ],
+    "first_hit_position": 1,
+    "top_score": 0.0388386123680241,
+    "top_similarity": 0.910481545016739
+  },
+  {
+    "id": 40,
+    "question": "How do I file a sexual harassment complaint?",
+    "kind": "policy",
+    "expected_sections": [
+      "HR-POSH-007#3-complaint-support-and-inquiry"
+    ],
+    "returned_chunk_ids": [
+      "HR-POSH-007#policy-at-a-glance#00",
+      "HR-POSH-007#3-complaint-support-and-inquiry#00",
+      "HR-POSH-007#1-zero-tolerance-and-legal-framework#00",
+      "HR-ETHICS-006#3-raising-concerns#00",
+      "HR-POSH-007#4-confidentiality-safety-and-non-retalia#00"
+    ],
+    "first_hit_position": 2,
+    "top_score": 0.0380986937590711,
+    "top_similarity": 0.870718613777332
+  },
+  {
+    "id": 41,
+    "question": "Is my harassment complaint kept confidential?",
+    "kind": "policy",
+    "expected_sections": [
+      "HR-POSH-007#4-confidentiality"
+    ],
+    "returned_chunk_ids": [
+      "HR-ETHICS-006#3-raising-concerns#00",
+      "HR-POSH-007#4-confidentiality-safety-and-non-retalia#00",
+      "HR-POSH-007#3-complaint-support-and-inquiry#00",
+      "HR-POSH-007#1-zero-tolerance-and-legal-framework#00",
+      "HR-POSH-007#policy-at-a-glance#00"
+    ],
+    "first_hit_position": 2,
+    "top_score": 0.0384757676655568,
+    "top_similarity": 0.870096102941507
+  },
+  {
+    "id": 42,
+    "question": "Who is on the Internal Committee?",
+    "kind": "policy",
+    "expected_sections": [
+      "HR-POSH-007#2-internal-committee-composition",
+      "HR-POSH-007#policy-at-a-glance"
+    ],
+    "returned_chunk_ids": [
+      "HR-POSH-007#2-internal-committee-composition#00",
+      "HR-EXIT-003#5-administrative-timeline-and-accountabi#00",
+      "HR-POSH-007#policy-at-a-glance#00",
+      "HR-FORM-012#form-8-employee-grievance-intake#01",
+      "HR-POSH-007#1-zero-tolerance-and-legal-framework#00"
+    ],
+    "first_hit_position": 1,
+    "top_score": 0.0392156862745098,
+    "top_similarity": 0.885712762389732
+  },
+  {
+    "id": 43,
+    "question": "Do I get a reward for referring a friend?",
+    "kind": "policy",
+    "expected_sections": [
+      "HR-TALENT-010#3-employee-referrals"
+    ],
+    "returned_chunk_ids": [
+      "HR-TALENT-010#3-employee-referrals#00",
+      "HR-TALENT-010#5-candidate-and-employee-records#00",
+      "ORG-CORP-001#09-reference-directory-knowledge-base-ma#03",
+      "HR-FORM-012#form-9-employee-policy-acknowledgment#00",
+      "HR-GOV-000#3-operational-configuration-register#00"
+    ],
+    "first_hit_position": 1,
+    "top_score": 0.0377896613190731,
+    "top_similarity": 0.832153985967996
+  },
+  {
+    "id": 44,
+    "question": "What happens on my first day after joining?",
+    "kind": "policy",
+    "expected_sections": [
+      "HR-TALENT-010#4-joining-experience"
+    ],
+    "returned_chunk_ids": [
+      "HR-TALENT-010#4-joining-experience#00",
+      "HR-EXIT-003#2-resignation-and-notice#00",
+      "ORG-CORP-001#07-people-operations-employee-lifecycle#01",
+      "HR-LIFE-005#2-probation-process#00",
+      "HR-LEAVE-001#policy-at-a-glance#00"
+    ],
+    "first_hit_position": 1,
+    "top_score": 0.0371517027863777,
+    "top_similarity": 0.839004114777221
+  },
+  {
+    "id": 45,
+    "question": "Which form do I fill to request leave?",
+    "kind": "keyword",
+    "expected_sections": [
+      "HR-FORM-012#form-1-leave-request",
+      "HR-FORM-012#policy-at-a-glance"
+    ],
+    "returned_chunk_ids": [
+      "HR-FORM-012#form-1-leave-request#01",
+      "HR-FORM-012#form-1-leave-request#00",
+      "HR-LEAVE-001#4-request-and-approval#00",
+      "HR-LEAVE-001#6-carry-forward-cash-payment-and-separat#00",
+      "HR-LEAVE-001#3-leave-types-and-limits#00"
+    ],
+    "first_hit_position": 1,
+    "top_score": 0.0377492877492877,
+    "top_similarity": 0.90484911770528
+  },
+  {
+    "id": 46,
+    "question": "Which policy documents does the company have?",
+    "kind": "policy",
+    "expected_sections": [
+      "HR-GOV-000#2-file-inventory",
+      "HR-GOV-000#policy-at-a-glance"
+    ],
+    "returned_chunk_ids": [
+      "HR-GOV-000#3-operational-configuration-register#00",
+      "HR-GOV-000#3-operational-configuration-register#01",
+      "HR-GOV-000#1-how-to-use-this-pack#00",
+      "ORG-CORP-001#09-reference-directory-knowledge-base-ma#02",
+      "HR-GOV-000#7-version-control-and-employee-communica#00"
+    ],
+    "first_hit_position": null,
+    "top_score": 0.0381263616557734,
+    "top_similarity": 0.87948701144794
+  },
+  {
+    "id": 47,
+    "question": "What does OnionOrg do as a business?",
+    "kind": "policy",
+    "expected_sections": [
+      "ORG-CORP-001"
+    ],
+    "returned_chunk_ids": [
+      "ORG-CORP-001#01-corporate-identity#02",
+      "ORG-CORP-001#onionorg#02",
+      "ORG-CORP-001#02-business-model-direction#00",
+      "HR-LEAVE-001#1-purpose-and-coverage#00",
+      "HR-LEAVE-001#cto-approval-document-control#00"
+    ],
+    "first_hit_position": 1,
+    "top_score": 0.0384615384615385,
+    "top_similarity": 0.906459992738964
+  },
+  {
+    "id": 48,
+    "question": "What is the stock option vesting schedule?",
+    "kind": "not_in_documents",
+    "expected_sections": [],
+    "returned_chunk_ids": [
+      "HR-WORK-004#1-work-arrangements#00",
+      "HR-GOV-000#3-operational-configuration-register#00",
+      "ORG-CORP-001#06-project-delivery-ways-of-working#02",
+      "HR-GOV-000#5-governance-and-accountability#00",
+      "HR-TALENT-010#policy-at-a-glance#00"
+    ],
+    "first_hit_position": null,
+    "top_score": 0.0388386123680241,
+    "top_similarity": 0.814574409399893
+  },
+  {
+    "id": 49,
+    "question": "What is the dress code on Fridays?",
+    "kind": "not_in_documents",
+    "expected_sections": [],
+    "returned_chunk_ids": [
+      "HR-GOV-000#4-legal-alignment-notes-as-of-2026-10-28#00",
+      "HR-ETHICS-006#policy-at-a-glance#00",
+      "HR-GOV-000#6-official-research-and-reference-links#01",
+      "HR-ETHICS-006#1-expected-conduct#00",
+      "HR-EXIT-003#4-full-and-final-calculation#00"
+    ],
+    "first_hit_position": null,
+    "top_score": 0.0380986937590711,
+    "top_similarity": 0.817876767046646
+  },
+  {
+    "id": 50,
+    "question": "Does the company offer a gym membership?",
+    "kind": "not_in_documents",
+    "expected_sections": [],
+    "returned_chunk_ids": [
+      "FIN-ADMIN-011#2-standard-reimbursement-limits#00",
+      "HR-WORK-004#3-remote-work-standards#00",
+      "HR-LEAVE-001#3-leave-types-and-limits#00",
+      "HR-EXIT-003#7-employee-settlement-dispute-channel#00",
+      "HR-ETHICS-006#2-conflicts-gifts-and-external-work#00"
+    ],
+    "first_hit_position": null,
+    "top_score": 0.0342505854800937,
+    "top_similarity": 0.77707445621491
+  }
+]

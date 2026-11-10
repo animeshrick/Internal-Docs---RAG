@@ -6,12 +6,16 @@
 -- The two result lists are merged with Reciprocal Rank Fusion (RRF): a chunk that ranks high in
 -- BOTH lists wins. Each list gives a chunk the score  1 / (rrf_k + rank).
 
-create or replace function hybrid_search_hr_chunks(
+-- The function now returns one more column (similarity), and Postgres cannot change the output of an
+-- existing function, so we drop the old version first.
+drop function if exists hybrid_search_hr_chunks(text, vector, int, float, float, int);
+
+create function hybrid_search_hr_chunks(
     query_text          text,
     query_embedding     vector(384),
     match_count         int   default 5,
     keyword_weight      float default 1.0,
-    semantic_weight     float default 1.0,
+    semantic_weight     float default 2.0,   -- meaning counts twice as much as keywords (chosen by the evaluation sweep)
     rrf_k               int   default 50
 )
 returns table (
@@ -19,7 +23,8 @@ returns table (
     doc_id          text,
     content         text,
     metadata        jsonb,
-    score           float,
+    score           float,      -- rank-based score used for ordering (NOT a confidence value)
+    similarity      float,      -- cosine similarity between question and chunk, 0 to 1 (higher = closer in meaning)
     keyword_rank    bigint,     -- empty when the keyword search did not find this chunk
     semantic_rank   bigint      -- empty when the vector search did not find this chunk
 )
@@ -60,6 +65,7 @@ as $$
         chunk.metadata,
         (coalesce(1.0 / (rrf_k + keyword_results.rank_position), 0.0) * keyword_weight
          + coalesce(1.0 / (rrf_k + semantic_results.rank_position), 0.0) * semantic_weight)::float as score,
+        (1 - (chunk.embedding <=> query_embedding))::float as similarity,
         keyword_results.rank_position  as keyword_rank,
         semantic_results.rank_position as semantic_rank
     from keyword_results

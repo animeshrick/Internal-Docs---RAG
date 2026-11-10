@@ -111,7 +111,7 @@ def test_table_rows_are_never_mixed_into_text_chunks(all_chunks):
 def test_leave_policy_at_a_glance_contains_casual_leave(all_chunks):
     # A real HR question: "how many casual leaves do I get?" must have an answer chunk.
     matching_chunks = [c for c in all_chunks
-                       if c["metadata"]["doc_id"] == "HR-LEAVE-001" and "Casual leave: 10 paid working days" in c["text"]]
+                       if c["metadata"]["doc_id"] == "HR-LEAVE-001" and "Casual leave: 8 paid working days" in c["text"]]
     assert matching_chunks
 
 

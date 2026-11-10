@@ -8,42 +8,42 @@
       "HR-LEAVE-001#3-leave-types-and-limits"
     ],
     "answer_must_mention": [
-      "10"
+      "8"
     ]
   },
   {
     "id": 2,
-    "question": "How many sick leaves can I carry forward?",
+    "question": "How many sick leaves do I get in a year?",
     "kind": "number",
     "expected_sections": [
       "HR-LEAVE-001#policy-at-a-glance",
-      "HR-LEAVE-001#3-leave-types-and-limits",
-      "HR-LEAVE-001#6-carry-forward"
+      "HR-LEAVE-001#3-leave-types-and-limits"
     ],
     "answer_must_mention": [
-      "56"
+      "12"
     ]
   },
   {
     "id": 3,
-    "question": "What is the maximum annual leave I can carry forward?",
+    "question": "What happens to my unused leave at the end of the year?",
     "kind": "number",
     "expected_sections": [
       "HR-LEAVE-001#6-carry-forward"
     ],
     "answer_must_mention": [
-      "30"
+      "FY 2026-27"
     ]
   },
   {
     "id": 4,
-    "question": "Do I get leave when I get married?",
+    "question": "Do I get maternity leave?",
     "kind": "policy",
     "expected_sections": [
-      "HR-LEAVE-001#3-leave-types-and-limits"
+      "HR-LEAVE-001#3-leave-types-and-limits",
+      "HR-LEAVE-001#policy-at-a-glance"
     ],
     "answer_must_mention": [
-      "3"
+      "3 months"
     ]
   },
   {
@@ -70,13 +70,14 @@
   },
   {
     "id": 7,
-    "question": "How many days off do I get for a wedding?",
+    "question": "How many months off do I get after having a baby?",
     "kind": "paraphrase",
     "expected_sections": [
-      "HR-LEAVE-001#3-leave-types-and-limits"
+      "HR-LEAVE-001#3-leave-types-and-limits",
+      "HR-LEAVE-001#policy-at-a-glance"
     ],
     "answer_must_mention": [
-      "3"
+      "3 months"
     ]
   },
   {
@@ -520,5 +521,27 @@
     "kind": "not_in_documents",
     "expected_sections": [],
     "answer_must_mention": []
+  },
+  {
+    "id": 51,
+    "question": "What is the longest leave I can ask for in one request?",
+    "kind": "number",
+    "expected_sections": [
+      "HR-LEAVE-001#4-request-and-approval"
+    ],
+    "answer_must_mention": [
+      "7"
+    ]
+  },
+  {
+    "id": 52,
+    "question": "Who can approve my leave?",
+    "kind": "policy",
+    "expected_sections": [
+      "HR-LEAVE-001#4-request-and-approval"
+    ],
+    "answer_must_mention": [
+      "manager"
+    ]
   }
 ]

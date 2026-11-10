@@ -5,7 +5,8 @@ For every question in eval/questions.json we run the retriever and check whether
 expected sections appears in the top results.
 
 Run:
-    python app/evaluation.py
+    python app/evaluation.py            (scores, misses, similarity of the best chunk)
+    python app/evaluation.py --sweep    (tries different keyword/semantic weights)
 
 Scores:
     hit at 1 : the right chunk is the very first result
@@ -54,6 +55,7 @@ def evaluate_question(question_record, search_function):
         "returned_chunk_ids": returned_chunk_ids,
         "first_hit_position": first_hit_position,
         "top_score": results[0]["score"] if results else None,
+        "top_similarity": results[0].get("similarity") if results else None,
     }
 
 
@@ -87,6 +89,37 @@ def summarize_by_kind(question_results):
     return {kind: summarize(items) for kind, items in grouped.items()}
 
 
+# (keyword_weight, semantic_weight) pairs tried by "python app/evaluation.py --sweep"
+WEIGHT_COMBINATIONS = [(1.0, 1.0), (1.0, 2.0), (1.0, 3.0), (2.0, 1.0), (0.5, 1.0)]
+
+
+def make_search_function(keyword_weight, semantic_weight, question_vectors_by_text, search_with_vector):
+    """Build a search function with fixed weights that reuses the question vectors computed once."""
+    def search_function(question, number_of_results):
+        return search_with_vector(question, question_vectors_by_text[question], number_of_results,
+                                  keyword_weight, semantic_weight)
+    return search_function
+
+
+def run_weight_sweep():
+    """Try several keyword/semantic weights and print one line of scores for each."""
+    from embeddings import embed_one_text
+    from retriever import search_chunks_with_vector
+
+    questions = load_questions()
+    print("Embedding each question once...")
+    question_vectors_by_text = {item["question"]: embed_one_text(item["question"]) for item in questions}
+
+    print("\nkeyword_weight  semantic_weight   hit@1   hit@3   hit@5    MRR")
+    for keyword_weight, semantic_weight in WEIGHT_COMBINATIONS:
+        search_function = make_search_function(keyword_weight, semantic_weight,
+                                               question_vectors_by_text, search_chunks_with_vector)
+        question_results = [evaluate_question(item, search_function) for item in questions]
+        summary = summarize(question_results)
+        print(f"{keyword_weight:>14}  {semantic_weight:>15}   {summary['hit_at_1_percent']:>5}   "
+              f"{summary['hit_at_3_percent']:>5}   {summary['hit_at_5_percent']:>5}   {summary['mrr']:>5}")
+
+
 def run_evaluation(search_function):
     question_results = []
     for question_record in load_questions():
@@ -96,6 +129,12 @@ def run_evaluation(search_function):
 
 
 if __name__ == "__main__":
+    import sys
+
+    if "--sweep" in sys.argv:
+        run_weight_sweep()
+        sys.exit()
+
     from retriever import search_chunks
 
     question_results = run_evaluation(search_chunks)
@@ -113,10 +152,14 @@ if __name__ == "__main__":
             print(f"      expected: {item['expected_sections']}")
             print(f"      got     : {item['returned_chunk_ids']}")
 
-    print("\nQUESTIONS NOT IN THE DOCUMENTS (the top score should be low; the LLM must say it does not know)")
+    # Closeness in meaning of the best chunk. Compare the two groups to find a cut-off for "I don't know".
+    answerable_similarities = sorted(item["top_similarity"] for item in question_results
+                                     if item["expected_sections"] and item["top_similarity"] is not None)
+    print("\nTOP SIMILARITY, QUESTIONS WITH AN ANSWER (lowest five):", [round(v, 3) for v in answerable_similarities[:5]])
+    print("TOP SIMILARITY, QUESTIONS NOT IN THE DOCUMENTS:")
     for item in question_results:
         if not item["expected_sections"]:
-            print(f"  [{item['id']}] {item['question']}  top score {item['top_score']}")
+            print(f"  [{item['id']}] {item['question']}  similarity {item['top_similarity']}")
 
     with open(RESULTS_FILE_PATH, "w", encoding="utf8") as results_file:
         json.dump(question_results, results_file, indent=2, ensure_ascii=False)

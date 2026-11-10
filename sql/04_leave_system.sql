@@ -1,0 +1,267 @@
+-- 04_leave_system.sql
+-- Run once in the Supabase SQL Editor, AFTER 03_employee_and_auth.sql.
+-- Safe to run again: everything uses "if not exists" / "create or replace".
+--
+-- What it adds:
+--   1. employee.gender (Male, Female, Others) and employee.manager_id (the reporting manager)
+--   2. leave_types      the policy numbers (casual 8, sick 12, maternity 90) - edit a row to change a rule
+--   3. holidays         company holidays (not counted as leave days)
+--   4. leave_requests   every leave an employee asked for, with its status
+--   5. pending_actions  a leave waiting for the employee to reply "yes"
+--   6. count_leave_days()   how many leave days a date range costs (skips Saturday, Sunday and holidays)
+--   7. get_leave_balances() used, pending and remaining days per leave type for one employee
+--   8. a private storage bucket for leave documents
+
+create extension if not exists btree_gist;   -- lets the database refuse two overlapping leaves for one person
+
+
+-- ---------------------------------------------------------------- 1. employee: gender and manager
+alter table public.employee add column if not exists gender text null;
+alter table public.employee add column if not exists manager_id bigint null references public.employee (id) on delete set null;
+
+do $$
+begin
+    if not exists (select 1 from pg_constraint where conname = 'employee_gender_check') then
+        alter table public.employee
+            add constraint employee_gender_check check (gender in ('Male', 'Female', 'Others'));
+    end if;
+    if not exists (select 1 from pg_constraint where conname = 'employee_not_own_manager') then
+        alter table public.employee
+            add constraint employee_not_own_manager check (manager_id is null or manager_id <> id);
+    end if;
+end $$;
+
+create index if not exists employee_manager_id_idx on public.employee (manager_id);
+
+-- Same helper as in 03 (repeated so this file also works on its own).
+create or replace function public.set_update_at()
+returns trigger
+language plpgsql
+as $$
+begin
+    new.update_at = now();
+    return new;
+end;
+$$;
+
+
+-- ---------------------------------------------------------------- 2. leave types (the policy numbers)
+create table if not exists public.leave_types (
+    code text primary key,                          -- casual, sick, maternity ...
+    name text not null,
+    days_allowed numeric not null check (days_allowed > 0),
+    limit_type text not null
+        check (limit_type in ('per_year', 'per_request')),   -- per_year: a yearly quota. per_request: a limit for each request
+    count_mode text not null
+        check (count_mode in ('working_days', 'calendar_days')),
+    applies_to_gender text null
+        check (applies_to_gender in ('Male', 'Female', 'Others')),   -- null = everyone
+    approver text not null default 'manager_or_hr'
+        check (approver in ('manager_or_hr', 'hr_only')),
+    can_apply_by_chat boolean not null default true,        -- false: must be applied on the website (with a document)
+    max_days_per_request numeric null,                      -- one request may span at most this many days (null = no limit)
+    is_active boolean not null default true,
+    update_at timestamptz not null default now()
+);
+
+drop trigger if exists leave_types_set_update_at on public.leave_types;
+create trigger leave_types_set_update_at
+    before update on public.leave_types
+    for each row execute function public.set_update_at();
+
+-- The three types you defined. Other types from the policy document (annual, floating, bereavement,
+-- paternity, marriage, unpaid) can be added later as extra rows.
+insert into public.leave_types
+    (code, name, days_allowed, limit_type, count_mode, applies_to_gender, approver, can_apply_by_chat, max_days_per_request)
+values
+    ('casual',    'Casual Leave',    8,  'per_year',    'working_days',  null,     'manager_or_hr', true,  7),
+    ('sick',      'Sick Leave',      12, 'per_year',    'working_days',  null,     'manager_or_hr', true,  7),
+    ('maternity', 'Maternity Leave', 90, 'per_request', 'calendar_days', 'Female', 'hr_only',       false, null)
+on conflict (code) do nothing;
+
+
+-- ---------------------------------------------------------------- 3. holidays
+create table if not exists public.holidays (
+    holiday_date date primary key,
+    name text not null
+);
+
+-- Placeholder holidays for testing. HR replaces them with the real calendar.
+insert into public.holidays (holiday_date, name) values
+    ('2026-12-25', 'Christmas (test data)'),
+    ('2027-01-01', 'New Year (test data)'),
+    ('2027-01-26', 'Republic Day (test data)'),
+    ('2027-08-15', 'Independence Day (test data)'),
+    ('2027-10-02', 'Gandhi Jayanti (test data)')
+on conflict (holiday_date) do nothing;
+
+
+-- ---------------------------------------------------------------- 4. leave requests
+create table if not exists public.leave_requests (
+    id bigint generated by default as identity primary key,
+    employee_id bigint not null references public.employee (id) on delete cascade,
+    leave_type text not null references public.leave_types (code),
+    start_date date not null,
+    end_date date not null,
+    day_type text not null default 'full' check (day_type in ('full', 'half')),
+    days numeric not null check (days > 0),         -- 0.5 for a half day
+    reason text null,
+    status text not null default 'pending'
+        check (status in ('pending', 'approved', 'rejected', 'cancelled')),
+    document_path text null,                        -- private storage path of the uploaded document
+    approver_id bigint null references public.employee (id),
+    decided_at timestamptz null,
+    decision_note text null,
+    created_at timestamptz not null default now(),
+    update_at timestamptz not null default now(),
+    constraint leave_dates_in_order check (end_date >= start_date),
+    constraint half_day_is_one_date check (day_type = 'full' or start_date = end_date),
+    -- Two pending or approved leaves of one person can never share a date, even if two requests arrive together.
+    constraint leave_requests_no_overlap exclude using gist (
+        employee_id with =,
+        daterange(start_date, end_date, '[]') with &&
+    ) where (status in ('pending', 'approved'))
+);
+
+create index if not exists leave_requests_employee_start_idx on public.leave_requests (employee_id, start_date);
+create index if not exists leave_requests_status_idx on public.leave_requests (status);
+
+drop trigger if exists leave_requests_set_update_at on public.leave_requests;
+create trigger leave_requests_set_update_at
+    before update on public.leave_requests
+    for each row execute function public.set_update_at();
+
+
+-- ---------------------------------------------------------------- 5. pending actions ("reply yes to confirm")
+create table if not exists public.pending_actions (
+    id bigint generated by default as identity primary key,
+    employee_id bigint not null references public.employee (id) on delete cascade,
+    action_type text not null,                      -- for now: apply_leave
+    payload jsonb not null,                         -- the already-checked details of the action
+    summary text not null,                          -- the sentence we showed the employee
+    status text not null default 'waiting'
+        check (status in ('waiting', 'confirmed', 'cancelled', 'expired')),
+    expires_at timestamptz not null default (now() + interval '10 minutes'),
+    created_at timestamptz not null default now()
+);
+
+-- At most one waiting action per employee. A new request replaces the old one.
+create unique index if not exists pending_actions_one_waiting_idx
+    on public.pending_actions (employee_id) where (status = 'waiting');
+
+
+-- ---------------------------------------------------------------- 6. how many days does a leave cost?
+-- working_days: Monday to Friday, minus company holidays.  calendar_days: every day counts.
+-- A half day costs 0.5 (or 0 if the date is a weekend or holiday, which the server then refuses).
+create or replace function public.count_leave_days(
+    p_start_date date,
+    p_end_date date,
+    p_day_type text,
+    p_count_mode text
+)
+returns numeric
+language sql
+stable
+as $$
+    select case
+        when p_day_type = 'half' then
+            case
+                when p_count_mode = 'calendar_days' then 0.5
+                when extract(isodow from p_start_date) < 6
+                     and not exists (select 1 from public.holidays h where h.holiday_date = p_start_date) then 0.5
+                else 0
+            end
+        when p_count_mode = 'calendar_days' then (p_end_date - p_start_date + 1)::numeric
+        else (
+            select count(*)::numeric
+            from generate_series(p_start_date::timestamp, p_end_date::timestamp, interval '1 day') as each_day
+            where extract(isodow from each_day) < 6
+              and not exists (select 1 from public.holidays h where h.holiday_date = each_day::date)
+        )
+    end;
+$$;
+
+
+-- ---------------------------------------------------------------- 7. balances for one employee
+-- Used = approved days, pending = days waiting for approval. Both count against the balance.
+-- The leave year is the financial year, 1 April to 31 March (policy HR-LEAVE-001 v1.3, first year FY 2026-27).
+-- To change it, edit the number in "leave_year_start_month" (4 = April, 1 = January). Keep it equal to
+-- LEAVE_YEAR_START_MONTH in app/leave_service.py, which only uses it to print the year name.
+-- A leave belongs to the year in which it starts.
+create or replace function public.get_leave_balances(
+    p_employee_id bigint,
+    p_on_date date default current_date
+)
+returns table (
+    type_code text,
+    type_name text,
+    limit_type text,
+    days_allowed numeric,
+    used_days numeric,
+    pending_days numeric,
+    remaining_days numeric,
+    max_days_per_request numeric,
+    can_apply_by_chat boolean
+)
+language sql
+stable
+as $$
+    with settings as (
+        select 4 as leave_year_start_month
+    ),
+    leave_year as (
+        select
+            make_date(
+                extract(year from p_on_date)::int
+                    - case when extract(month from p_on_date) < s.leave_year_start_month then 1 else 0 end,
+                s.leave_year_start_month,
+                1
+            ) as year_start
+        from settings s
+    )
+    select
+        t.code,
+        t.name,
+        t.limit_type,
+        t.days_allowed,
+        coalesce(sum(r.days) filter (where r.status = 'approved'), 0),
+        coalesce(sum(r.days) filter (where r.status = 'pending'), 0),
+        case
+            when t.limit_type = 'per_year'
+                then t.days_allowed - coalesce(sum(r.days) filter (where r.status in ('approved', 'pending')), 0)
+            else null
+        end,
+        t.max_days_per_request,
+        t.can_apply_by_chat
+    from public.leave_types t
+    join public.employee e on e.id = p_employee_id
+    cross join leave_year y
+    left join public.leave_requests r
+        on r.employee_id = e.id
+       and r.leave_type = t.code
+       and r.status in ('approved', 'pending')
+       and r.start_date >= y.year_start
+       and r.start_date < (y.year_start + interval '1 year')::date
+    where t.is_active
+      and (t.applies_to_gender is null or t.applies_to_gender = e.gender)
+    group by t.code, t.name, t.limit_type, t.days_allowed, t.max_days_per_request, t.can_apply_by_chat
+    order by t.code;
+$$;
+
+
+-- ---------------------------------------------------------------- 8. only our server (secret key) may read these tables
+alter table public.leave_types enable row level security;
+alter table public.holidays enable row level security;
+alter table public.leave_requests enable row level security;
+alter table public.pending_actions enable row level security;
+
+
+-- ---------------------------------------------------------------- 9. private bucket for leave documents (Supabase only)
+do $$
+begin
+    if exists (select 1 from information_schema.schemata where schema_name = 'storage') then
+        insert into storage.buckets (id, name, public)
+        values ('leave-documents', 'leave-documents', false)
+        on conflict (id) do nothing;
+    end if;
+end $$;

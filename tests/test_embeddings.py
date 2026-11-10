@@ -361,7 +361,7 @@ def make_database_row(chunk_id, keyword_rank, semantic_rank):
         "chunk_id": chunk_id, "doc_id": chunk_id.split("#")[0], "content": "Title > Section\nBody text.",
         "metadata": {"title": "Leave Policy", "section": "2. Leave types", "version": "1.2",
                      "effective_date": "2026-01-01"},
-        "score": 0.03, "keyword_rank": keyword_rank, "semantic_rank": semantic_rank,
+        "score": 0.03, "similarity": 0.81, "keyword_rank": keyword_rank, "semantic_rank": semantic_rank,
     }
 
 
@@ -384,6 +384,17 @@ def test_retriever_sends_question_and_vector_and_formats_results(monkeypatch):
     assert results[0]["found_by_keyword"] and not results[0]["found_by_meaning"]
     assert results[1]["found_by_meaning"] and not results[1]["found_by_keyword"]
     assert results[0]["title"] == "Leave Policy" and results[0]["version"] == "1.2"
+    assert results[0]["similarity"] == 0.81
+    assert sent["arguments"]["keyword_weight"] == 1.0 and sent["arguments"]["semantic_weight"] == 2.0   # the new defaults
+
+
+def test_retriever_passes_custom_weights_and_reuses_the_vector(monkeypatch):
+    sent = {}
+    monkeypatch.setattr(retriever, "call_database_function",
+                        lambda name, arguments: (sent.update(arguments), [])[1])
+    retriever.search_chunks_with_vector("question", [0.1] * 384, 3, keyword_weight=0.5, semantic_weight=2.0)
+    assert sent["keyword_weight"] == 0.5 and sent["semantic_weight"] == 2.0
+    assert sent["query_embedding"] == [0.1] * 384
 
 
 def test_retriever_rejects_an_empty_question():

@@ -86,3 +86,23 @@ def test_every_expected_section_exists_in_the_chunk_file(parsed_documents):
 def test_some_questions_are_deliberately_not_answerable():
     kinds = [question["kind"] for question in evaluation.load_questions()]
     assert kinds.count("not_in_documents") >= 2
+
+
+# ---------------------------------------------------------------- weight sweep helpers
+def test_make_search_function_uses_fixed_weights_and_saved_vector():
+    calls = []
+
+    def fake_search_with_vector(question, vector, number_of_results, keyword_weight, semantic_weight):
+        calls.append((question, vector, number_of_results, keyword_weight, semantic_weight))
+        return []
+
+    search_function = evaluation.make_search_function(2.0, 1.0, {"How many leaves?": [0.5]}, fake_search_with_vector)
+    search_function("How many leaves?", 5)
+    assert calls == [("How many leaves?", [0.5], 5, 2.0, 1.0)]
+
+
+def test_evaluate_question_records_top_similarity():
+    question_record = {"id": 1, "question": "q", "kind": "number", "expected_sections": ["A#x"]}
+    result = evaluation.evaluate_question(
+        question_record, lambda question, number_of_results: [{"chunk_id": "A#x#00", "score": 0.03, "similarity": 0.77}])
+    assert result["top_similarity"] == 0.77
