@@ -18,10 +18,10 @@ import json
 import logging
 from collections import defaultdict
 
-from app.core.config import PROJECT_ROOT
+from app.core.paths import EVAL_DIR
 
-QUESTIONS_FILE_PATH = PROJECT_ROOT / "eval" / "questions.json"
-RESULTS_FILE_PATH = PROJECT_ROOT / "eval" / "results.json"
+QUESTIONS_FILE_PATH = EVAL_DIR / "questions.json"
+RESULTS_FILE_PATH = EVAL_DIR / "results.json"
 NUMBER_OF_RESULTS = 5
 
 

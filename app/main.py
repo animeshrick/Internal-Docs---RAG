@@ -44,12 +44,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from starlette.concurrency import run_in_threadpool
 
-from app.api.limits import (
-    ALLOWED_DOCUMENT_TYPES,
-    MAXIMUM_DOCUMENT_BYTES,
-    MAXIMUM_PASSWORD_INPUT_LENGTH,
-    MAXIMUM_QUESTION_LENGTH,
-)
+from app.api.limits import ALLOWED_DOCUMENT_TYPES, MAXIMUM_DOCUMENT_BYTES
 from app.api.requests import (
     AttachDocumentRequest,
     ChangePasswordRequest,
@@ -291,8 +286,13 @@ async def upload_leave_document(request: Request, filename: str = Query(min_leng
 def apply_leave(request: LeaveApplyRequest, employee: dict = Depends(get_ready_employee)):
     """Apply on the website. Maternity leave can only be applied here (document required)."""
     result = leave_service.apply_on_website(
-        load_employee_row(employee), request.leave_type, request.start_date, request.end_date,
-        request.day_type, request.reason, request.document_path)
+        load_employee_row(employee), 
+        request.leave_type, 
+        request.start_date, 
+        request.end_date,
+        request.day_type, 
+        request.reason, 
+        request.document_path)
     return {"leave_id": result["leave"]["id"], "status": "pending", "approver": result["approver_name"],
             "message": f"Your request was sent to {result['approver_name']} for approval."}
 

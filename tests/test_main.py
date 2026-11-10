@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.identity import auth as auth
 from app import main
+from app.api.limits import MAXIMUM_QUESTION_LENGTH
 
 client = TestClient(main.app)
 
@@ -206,7 +207,7 @@ def test_chat_passes_the_employee_and_question_to_the_assistant(logged_in, monke
 def test_chat_rejects_bad_questions(logged_in):
     assert client.post("/chat", json={}, headers=TOKEN_HEADERS).status_code == 422
     assert client.post("/chat", json={"question": ""}, headers=TOKEN_HEADERS).status_code == 422
-    long_question = "a" * (main.MAXIMUM_QUESTION_LENGTH + 1)
+    long_question = "a" * (MAXIMUM_QUESTION_LENGTH + 1)
     assert client.post("/chat", json={"question": long_question}, headers=TOKEN_HEADERS).status_code == 422
 
 

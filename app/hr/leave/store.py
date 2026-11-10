@@ -6,7 +6,8 @@ The leave rules (how many days, who can approve ...) are in service.py next to i
 """
 import requests
 
-from app.core.supabase import build_headers, call_database_function, check_response, get_table_url, REQUEST_TIMEOUT_SECONDS
+from app.core.supabase import (REQUEST_TIMEOUT_SECONDS, build_headers, call_database_function, check_response,
+                               get_table_url, read_rows)
 
 EMPLOYEE_TABLE_NAME = "employee"
 LEAVE_TYPES_TABLE_NAME = "leave_types"

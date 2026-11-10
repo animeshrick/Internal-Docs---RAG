@@ -80,6 +80,11 @@ uvicorn app.main:app --reload
 pytest tests/ -q
 ```
 
+The suite includes `tests/test_static_checks.py`, which runs pyflakes over the
+source. Most tests replace the store functions with fakes, so a name that is used
+but never imported would otherwise stay invisible until the first real call in
+production. Install it with `pip install pyflakes`; the test skips if it is missing.
+
 Before the first embed: run the files in `sql/` in order in the Supabase SQL editor,
 then deploy the embedding function with `supabase functions deploy embed --no-verify-jwt`.
 

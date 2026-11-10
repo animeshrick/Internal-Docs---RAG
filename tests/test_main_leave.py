@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from app.identity import auth as auth
 from app.hr.leave import service as leave_service
 from app import main
+from app.api.limits import MAXIMUM_DOCUMENT_BYTES
 from fakes import FakeDatabase
 
 client = TestClient(main.app)
@@ -95,7 +96,7 @@ def test_upload_limits(api):
     pdf = {**HEADERS, "Content-Type": "application/pdf"}
     assert client.post("/leave/documents?filename=a.exe", content=b"x", headers={**HEADERS, "Content-Type": "application/x-msdownload"}).status_code == 415
     assert client.post("/leave/documents?filename=a.pdf", content=b"", headers=pdf).status_code == 400
-    too_big = b"x" * (main.MAXIMUM_DOCUMENT_BYTES + 1)
+    too_big = b"x" * (MAXIMUM_DOCUMENT_BYTES + 1)
     assert client.post("/leave/documents?filename=a.pdf", content=too_big, headers=pdf).status_code == 413
     assert api.uploads == []
     assert client.post("/leave/documents", content=b"x", headers=pdf).status_code == 422          # filename is required

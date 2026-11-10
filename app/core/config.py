@@ -8,7 +8,7 @@ import os
 
 from dotenv import load_dotenv
 
-from app.core.paths import CHUNKS_FILE_PATH, PROJECT_ROOT  # noqa: F401  (re-exported for callers)
+from app.core.paths import PROJECT_ROOT
 
 # Read the .env file once, when this module is first imported.
 load_dotenv(PROJECT_ROOT / ".env")

@@ -1,6 +1,5 @@
 """Tests for app/llm.py. No real Groq or Supabase calls are made."""
 import pytest
-import requests
 
 from app.rag.answer import llm as llm
 

@@ -16,7 +16,7 @@ import json
 
 import requests
 
-from app.core.config import CHUNKS_FILE_PATH
+from app.core.paths import CHUNKS_FILE_PATH
 from app.core.supabase import (
     IDS_PER_DELETE_REQUEST,
     REQUEST_TIMEOUT_SECONDS,
