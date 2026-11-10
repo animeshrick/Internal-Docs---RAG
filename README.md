@@ -122,3 +122,54 @@ so there is no Supabase client package, and no LangChain or vector-store SDK.
 | bcrypt | password hashing |
 | PyJWT | login tokens |
 | pytest | the test suite |
+
+## Deploying
+
+`Dockerfile` builds a two-stage image: compilers in the build stage, a slim
+runtime with only `app/` and a virtualenv. It runs as a non-root user and takes
+its port from `PORT` (default 8080), which is what App Runner sets.
+
+```bash
+docker build -t internal-docs-rag .
+docker run --rm -p 8080:8080 --env-file .env internal-docs-rag
+curl localhost:8080/health
+```
+
+Dependencies come from `requirements-prod.txt`, not `requirements.txt`. The
+latter is a `pip freeze` of the dev machine: it is saved as UTF-16 (pip cannot
+read it), pins `starlette==1.10.0` which does not exist on PyPI, carries jupyter,
+ipython, debugpy, numpy, nltk, pinecone and langchain which nothing imports, and
+is missing `bcrypt` and `PyJWT`, which `app/identity/auth.py` imports at startup.
+
+### Settings
+
+No `.env` goes into the image; `.dockerignore` blocks it. `load_dotenv` is a
+no-op when the file is absent, so the platform's environment variables are used
+as they are. Required: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `JWT_SECRET_KEY`,
+`GROQ_API_KEY`. Optional: `LOG_LEVEL`, `CORS_ALLOWED_ORIGINS`, `GROQ_ANSWER_MODEL`,
+`GROQ_REWRITE_MODEL`. Put the four secrets in AWS Secrets Manager or SSM
+Parameter Store and reference them from the task definition rather than pasting
+them as plain environment variables.
+
+### On AWS
+
+Build for the architecture the task runs on. Building on an ARM machine and
+deploying to an x86 task is the most common "works locally, fails on AWS":
+
+```bash
+docker build --platform linux/amd64 -t internal-docs-rag .
+```
+
+Push to ECR, then:
+
+- **App Runner**: port 8080, health check path `/health`. Nothing else to set.
+- **ECS Fargate behind an ALB**: target group health check `/health`, container
+  port 8080. The image already starts uvicorn with `--proxy-headers`, so client
+  IPs and scheme survive the load balancer.
+
+Run one container per task and scale out rather than adding uvicorn workers. The
+routes are sync functions, so FastAPI already runs them in a thread pool.
+
+Ingestion is not part of the image: `data/` is excluded. Parse, chunk and embed
+from a workstation against the same Supabase project, or mount the folder and run
+`python -m app.rag.ingest.embeddings` as a one-off task.
