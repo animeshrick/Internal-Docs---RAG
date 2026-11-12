@@ -16,7 +16,8 @@ The day (all times are India time; the numbers live in the attendance_settings t
     - A check-out at or after 19:00 is present.
 
 Missed check-in or check-out:
-    - Asked for a day that is at most correction_window_days (7) old. Older days cannot be requested.
+    - Not asked for a weekend (week off).
+    - Asked for a day that is at most correction_window_days (7) working days old. Weekends do not count. Older days cannot be requested.
     - Employee requests go to the PM or HR, the PM's request goes to HR, and HR's own request is approved
       automatically with the remark "Auto".
 Check-in and check-out work only from the office network when network_check_enabled is true (off while testing).
@@ -135,8 +136,8 @@ def to_local(moment_text):
 
 
 def format_clock(moment_text):
-    """'10:05 AM' in India time."""
-    return to_local(moment_text).strftime("%I:%M %p").lstrip("0")
+    """'10:05' (24 hour clock) in India time."""
+    return to_local(moment_text).strftime("%H:%M")
 
 
 def check_network(settings, client_ip):
@@ -451,14 +452,27 @@ def finish_correction(correction_row, decided_by_id, decision, note, settings):
     return updated_row
 
 
+def count_working_days_after(start_day, end_day):
+    """How many Monday to Friday days lie after start_day, up to and including end_day. Weekends are not counted."""
+    count = 0
+    day = start_day + timedelta(days=1)
+    while day <= end_day:
+        if day.weekday() < 5:
+            count += 1
+        day += timedelta(days=1)
+    return count
+
+
 def create_correction(employee, work_date, check_in_text, check_out_text, reason):
     level = require_attendance(employee)
     settings = read_settings()
     today = get_today()
     if work_date > today:
         raise AttendanceError("You cannot ask for a correction for a day that has not come yet.")
-    if (today - work_date).days > settings["correction_window_days"]:
-        raise AttendanceError(f"A correction can be asked for only within {settings['correction_window_days']} days. That day is older.")
+    if work_date.weekday() >= 5:
+        raise AttendanceError("Saturday and Sunday are week offs, so there is nothing to correct on that day.")
+    if count_working_days_after(work_date, today) > settings["correction_window_days"]:
+        raise AttendanceError(f"A correction can be asked for only within {settings['correction_window_days']} working days. That day is older.")
 
     requested_in = parse_clock_text(check_in_text, "check-in time")
     requested_out = parse_clock_text(check_out_text, "check-out time")
@@ -517,6 +531,8 @@ def decide_correction(viewer, correction_id, decision, note=None):
         raise AttendanceError("I could not find that request.", 404)
     if row["status"] != "pending":
         raise AttendanceError(f"This request was already {row['status']}.", 409)
+    if decision == "rejected" and not (note or "").strip():
+        raise AttendanceError("Please write the reason for rejecting this request.", 400)
     decided_row = finish_correction(row, viewer["employee_id"], decision, (note or "").strip() or None, read_settings())
     return describe_correction(decided_row, {requester["id"]: requester})
 

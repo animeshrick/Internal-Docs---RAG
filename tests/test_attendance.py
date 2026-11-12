@@ -76,12 +76,12 @@ def test_the_buttons_follow_the_state_of_the_day(database):
 
 def test_a_second_check_in_or_check_out_is_refused(database):
     work_day(database, "10:05")
-    with pytest.raises(AttendanceError, match="already checked in today at 10:05 AM") as error:
+    with pytest.raises(AttendanceError, match="already checked in today at 10:05") as error:
         service.check_in(EMPLOYEE, LOCAL_IP)
     assert error.value.status_code == 409
     database.set_time("19:00")
     service.check_out(EMPLOYEE, LOCAL_IP)
-    with pytest.raises(AttendanceError, match="already checked out today at 7:00 PM"):
+    with pytest.raises(AttendanceError, match="already checked out today at 19:00"):
         service.check_out(EMPLOYEE, LOCAL_IP)
 
 
@@ -247,6 +247,17 @@ def test_hr_can_also_decide_an_employees_request_and_reject_leaves_the_row_alone
     assert database.get_attendance(3, "2026-11-10")["check_out_at"] is None
 
 
+def test_a_rejection_needs_a_comment(database):
+    work_day(database, "10:00", None, "2026-11-10")
+    request = ask(EMPLOYEE)
+    for empty_note in (None, "", "   "):
+        with pytest.raises(AttendanceError, match="reason for rejecting") as error:
+            service.decide_correction(PM, request["id"], "rejected", empty_note)
+        assert error.value.status_code == 400
+    assert database.get_correction(request["id"])["status"] == "pending"
+    assert service.decide_correction(PM, request["id"], "rejected", "No proof")["decision_note"] == "No proof"
+
+
 def test_the_pms_request_goes_to_hr_and_hr_requests_are_automatic(database):
     work_day(database, "10:00", None, "2026-11-10", employee=PM)
     request = ask(PM)
@@ -270,14 +281,28 @@ def test_hr_cannot_decide_another_hr_or_hidden_people(database):
     assert service.list_correction_inbox(HR) == []
 
 
-def test_only_the_last_7_days_can_be_corrected(database):
-    work_day(database, "10:00", None, "2026-11-05")
-    database.set_time("10:05")                                                   # back to today, 12 November
-    assert ask(EMPLOYEE, day="2026-11-05")["status"] == "pending"               # exactly 7 days old
-    with pytest.raises(AttendanceError, match="within 7 days"):
-        ask(EMPLOYEE, day="2026-11-04", check_in="10:00")
+def test_only_the_last_7_working_days_can_be_corrected(database):
+    # Today is Thursday 12 November. Weekends are not counted, so 7 working days back is Tuesday 3 November.
+    work_day(database, "10:00", None, "2026-11-03")
+    database.set_time("10:05")                                                   # back to today
+    assert ask(EMPLOYEE, day="2026-11-03")["status"] == "pending"
+    with pytest.raises(AttendanceError, match="within 7 working days"):
+        ask(EMPLOYEE, day="2026-11-02", check_in="10:00")
     with pytest.raises(AttendanceError, match="not come yet"):
         ask(EMPLOYEE, day="2026-11-13", check_in="10:00")
+
+
+def test_a_weekend_cannot_be_corrected(database):
+    for weekend_day in ("2026-11-07", "2026-11-08"):                              # Saturday and Sunday
+        with pytest.raises(AttendanceError, match="week offs"):
+            ask(EMPLOYEE, day=weekend_day, check_in="10:00")
+
+
+def test_working_days_are_counted_without_weekends():
+    from datetime import date as day_of
+    assert service.count_working_days_after(day_of(2026, 11, 6), day_of(2026, 11, 9)) == 1     # Friday to Monday
+    assert service.count_working_days_after(day_of(2026, 11, 7), day_of(2026, 11, 8)) == 0     # a weekend
+    assert service.count_working_days_after(day_of(2026, 11, 2), day_of(2026, 11, 12)) == 8
 
 
 def test_a_correction_must_make_sense(database):
@@ -332,7 +357,7 @@ def test_a_failed_approval_puts_the_request_back(database, monkeypatch):
 def test_chat_text_for_myself_and_for_people_below(database):
     work_day(database, "10:00", "19:00", "2026-11-10")
     own_text = service.build_chat_text(EMPLOYEE, "", None)
-    assert "Attendance for 2026-11" in own_text and "2026-11-10 Tue: present, in 10:00 AM, out 7:00 PM" in own_text
+    assert "Attendance for 2026-11" in own_text and "2026-11-10 Tue: present, in 10:00, out 19:00" in own_text
     assert "These records belong to" not in own_text
     other_text = service.build_chat_text(HR, "EMP-3", "2026-11")
     assert other_text.startswith("These records belong to Ann Employee (EMP-3)")
