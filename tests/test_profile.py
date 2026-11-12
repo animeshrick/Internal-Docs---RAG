@@ -2,8 +2,8 @@
 import pytest
 from fastapi.testclient import TestClient
 
-import main
-import people_store
+from app import main
+from app.hr.people import store as people_store
 
 client = TestClient(main.app)
 HEADERS = {"Authorization": "Bearer any-token"}

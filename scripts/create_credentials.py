@@ -15,10 +15,10 @@ from datetime import datetime
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / "app"))
+sys.path.insert(0, str(PROJECT_ROOT))
 
-import auth  # noqa: E402
-import employee_store  # noqa: E402
+from app.identity import auth  # noqa: E402
+from app.hr.employees import store as employee_store  # noqa: E402
 
 
 def create_for_one_employee(emp_id, role):

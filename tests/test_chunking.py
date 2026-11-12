@@ -3,7 +3,7 @@ import copy
 
 import pytest
 
-from app.chunking import CONFIG, check_chunks, chunk_all, chunk_document, est_tokens, slug, split_sentences
+from app.rag.ingest.chunking import CONFIG, check_chunks, chunk_all, chunk_document, est_tokens, slug, split_sentences
 
 MAXIMUM_ALLOWED_TOKENS = CONFIG["max_tokens"] * 1.1     # same 10% tolerance as check_chunks
 

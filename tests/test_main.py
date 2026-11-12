@@ -3,8 +3,9 @@ so no real Groq or Supabase calls are made."""
 import pytest
 from fastapi.testclient import TestClient
 
-import auth
-import main
+from app.identity import auth as auth
+from app import main
+from app.api.limits import MAXIMUM_QUESTION_LENGTH
 
 client = TestClient(main.app)
 
@@ -43,7 +44,6 @@ def logged_in(monkeypatch):
 def no_chat_history(monkeypatch):
     """The chat history lives in Supabase, so every test here uses an empty, do-nothing history by default."""
     monkeypatch.setattr(main.chat_store, "list_messages", lambda employee_id, limit, before_id=None: [])
-    monkeypatch.setattr(main.chat_store, "delete_expired_messages_once_an_hour", lambda: None)
 
     def fake_save_exchange(employee_id, question_text, asked_at, answer_text, sources, answered_at):
         return {"id": 1, "created_at": asked_at.isoformat()}, {"id": 2, "created_at": answered_at.isoformat()}
@@ -206,7 +206,7 @@ def test_chat_passes_the_employee_and_question_to_the_assistant(logged_in, monke
 def test_chat_rejects_bad_questions(logged_in):
     assert client.post("/chat", json={}, headers=TOKEN_HEADERS).status_code == 422
     assert client.post("/chat", json={"question": ""}, headers=TOKEN_HEADERS).status_code == 422
-    long_question = "a" * (main.MAXIMUM_QUESTION_LENGTH + 1)
+    long_question = "a" * (MAXIMUM_QUESTION_LENGTH + 1)
     assert client.post("/chat", json={"question": long_question}, headers=TOKEN_HEADERS).status_code == 422
 
 

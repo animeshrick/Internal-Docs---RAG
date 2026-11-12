@@ -1,7 +1,8 @@
 """Tests for app/evaluation.py and for the question file eval/questions.json"""
 import json
 
-import evaluation
+from app.core.paths import CHUNKS_FILE_PATH
+from app.rag.eval import evaluation as evaluation
 
 
 # ---------------------------------------------------------------- finding the first hit
@@ -76,7 +77,7 @@ def test_question_file_is_well_formed():
 
 def test_every_expected_section_exists_in_the_chunk_file(parsed_documents):
     chunk_ids = [json.loads(line)["chunk_id"]
-                 for line in open(evaluation.PROJECT_ROOT / "data" / "parsed" / "chunks.jsonl", encoding="utf8")]
+                 for line in open(CHUNKS_FILE_PATH, encoding="utf8")]
     for question in evaluation.load_questions():
         for expected_section in question["expected_sections"]:
             assert any(chunk_id.startswith(expected_section) for chunk_id in chunk_ids), \

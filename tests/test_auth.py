@@ -4,7 +4,7 @@ from datetime import timedelta
 
 import pytest
 
-import auth
+from app.identity import auth as auth
 
 
 class FakeStore:

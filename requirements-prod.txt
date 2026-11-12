@@ -1,0 +1,25 @@
+# Runtime dependencies only. requirements.txt is a full `pip freeze` of the dev
+# machine (jupyter, ipython, debugpy, numpy, nltk, pinecone, langchain) and is
+# saved as UTF-16, which pip cannot read. Neither belongs in a container.
+#
+# Regenerate the pins after changing a dependency:
+#   pip install -r requirements-prod.txt && pip freeze > /tmp/f.txt   (then copy the versions back)
+
+# web layer. Only top-level packages are pinned; pip resolves starlette, anyio,
+# h11 and the rest. (requirements.txt pins starlette==1.10.0, which does not exist
+# on PyPI at all, so a build from that file fails before it starts.)
+fastapi==0.162.0
+uvicorn==0.54.0
+pydantic==2.14.1
+
+# auth: imported by app/identity/auth.py
+bcrypt==5.0.0
+PyJWT==2.15.1
+
+# supabase over its REST API, and .env loading
+requests==2.34.2
+python-dotenv==1.2.4
+
+# only used by the ingestion pipeline (app/rag/ingest/parsing.py).
+# Drop this line and the lxml it pulls in if the image only ever serves the API.
+python-docx==1.2.0

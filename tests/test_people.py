@@ -3,9 +3,9 @@ import json
 
 import pytest
 
-import assistant
-import people_service
-import people_store
+from app.rag.answer import assistant as assistant
+from app.hr.people import service as people_service
+from app.hr.people import store as people_store
 
 NO_ANSWER = "I don't have an answer for this question."
 PEOPLE = {

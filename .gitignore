@@ -29,8 +29,8 @@ data/backup/
 Thumbs.db
 
 
-# only for now
-app/embeddings_with_voyage.py
+# Voyage embedding experiment: kept out of git on purpose (see app/rag/ingest/embeddings.py)
+app/rag/ingest/embeddings_with_voyage.py
 # Supabase CLI local files
 supabase/.temp/
 supabase/.branches/
