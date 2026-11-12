@@ -165,6 +165,7 @@ def load_employee_from_token(token):
         "emp_id": record["emp_id"],
         "full_name": record["full_name"],
         "dept": record["dept"],
+        "is_confidential": bool(record.get("is_confidential")),      # the CTO: no attendance, and hidden from HR
         "role": record["login"]["role"],
         "must_change_password": record["login"]["must_change_password"],
     }
@@ -218,6 +219,8 @@ def authenticate(emp_id, password):
         "role": login["role"],
         "full_name": record["full_name"],
         "emp_id": record["emp_id"],
+        "dept": record["dept"],                                      # the website decides the menu from these two
+        "is_confidential": bool(record.get("is_confidential")),
     }
 
 

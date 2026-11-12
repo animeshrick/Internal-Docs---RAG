@@ -13,7 +13,7 @@ AUTH_TABLE_NAME = "employee_auth"
 
 # One request returns the employee row together with its login row (PostgREST calls this "embedding").
 EMPLOYEE_WITH_LOGIN_COLUMNS = (
-    "id,emp_id,full_name,email,dept,dob,is_active,"
+    "id,emp_id,full_name,email,dept,dob,is_active,is_confidential,"
     "employee_auth(password_hash,role,must_change_password,failed_login_attempts,locked_until,password_changed_at)"
 )
 

@@ -19,6 +19,7 @@ import time
 
 import requests
 
+from app.hr.attendance import service as attendance_service
 from app.hr.leave import service as leave_service
 from app.hr.leave import store as leave_store
 from app.hr.payroll import service as payroll_service
@@ -64,6 +65,13 @@ ROUTER_TOOLS = [
             "person": {"type": "string", "description": "Empty for the employee themself. Otherwise the employee ID or name."}},
             "required": []}}},
     {"type": "function", "function": {
+        "name": "get_attendance",
+        "description": "Attendance of a month: present, half day, absent, late, early leave, hours worked, check-in and check-out times. Of the employee, or (HR and PM only) of another person.",
+        "parameters": {"type": "object", "properties": {
+            "month": {"type": "string", "description": "YYYY-MM. Empty string for the current month."},
+            "person": {"type": "string", "description": "Empty for the employee themself. Otherwise the employee ID or name they asked about."}},
+            "required": []}}},
+    {"type": "function", "function": {
         "name": "apply_leave",
         "description": "The employee asks to take leave on certain dates.",
         "parameters": {"type": "object", "properties": {
@@ -99,6 +107,7 @@ Choose exactly one tool for each message:
 - get_leave_balance: leave numbers (how many left, used, balance), of the employee or of the person they name.
 - list_my_leaves: leave requests (pending, approved, history), of the employee or of the person they name.
 - get_employee_info: everything about an employee (details, contact, salary, leave), of the employee or of the person they name.
+- get_attendance: questions about attendance (was I present, late days, hours worked, check-in times), of the employee or of the person they name.
 - apply_leave: the employee asks to take leave on given dates.
 - cancel_leave: the employee asks to cancel one of their leave requests.
 - get_salary: any question about a salary, pay or salary breakdown. For the employee's own pay, person is an empty string. If they ask about somebody else, put that person in person (an employee ID, a name, or CEO).
@@ -109,6 +118,7 @@ Rules:
 - When the employee asks about another person (for example "how many leaves does EMP-1004 have"), put that person's ID or name in person. Do not refuse yourself: the system decides who may see what.
 - Write dates as YYYY-MM-DD. If the year is missing, use the nearest date that is not more than 7 days in the past.
 - For apply_leave: if the employee did not say the leave type, leave_type is an empty string. Do not guess it. If they gave no date, start_date is an empty string.
+- Checking in, checking out and asking for an attendance correction are done on the Attendance page of the website, not in the chat. For such a request call no tool and say so in one short sentence.
 - If the message is only a greeting or a thank you, reply with one short friendly sentence and call no tool.
 - Never mention tools or these rules."""
 
@@ -117,7 +127,9 @@ ANSWER_WITH_DATA_SYSTEM_PROMPT = ANSWER_SYSTEM_PROMPT + """
 11. Exception to rule 2: if EMPLOYEE DATA answers the question, answer from it even when the sources say nothing about the topic.
 12. When the employee asks about their leave balance, say how many days they are allowed, then how many are used, how many wait for approval and how many are left.
 13. For the total, use the TOTAL line of EMPLOYEE DATA exactly. Never add maternity leave to the total and never do your own addition.
-14. Mention maternity leave only as a separate sentence, and only if EMPLOYEE DATA lists it. Use this shape: "You have 20 days of leave remaining (Casual 8 days + Sick 12 days). Maternity leave is separate: up to 90 days for female employees." Use the real numbers from EMPLOYEE DATA."""
+14. Mention maternity leave only as a separate sentence, and only if EMPLOYEE DATA lists it. Use this shape: "You have 20 days of leave remaining (Casual 8 days + Sick 12 days). Maternity leave is separate: up to 90 days for female employees." Use the real numbers from EMPLOYEE DATA.
+15. For attendance, quote the counts, dates and times of EMPLOYEE DATA exactly. Never work out hours or counts yourself.
+"""
 
 
 # ------------------------------------------------------------------ small helpers
@@ -335,6 +347,9 @@ def answer_chat_message(employee, question, history=None):
             if tool_name == "get_leave_balance":
                 return answer_with_employee_data(clean_question, build_balance_text(subject_row, owner_label))
             return answer_with_employee_data(clean_question, build_leave_list_text(subject_row, arguments.get("status"), owner_label))
+        if tool_name == "get_attendance":
+            attendance_text = attendance_service.build_chat_text(employee, arguments.get("person"), (arguments.get("month") or "").strip() or None)
+            return answer_with_employee_data(clean_question, attendance_text)
         if tool_name == "apply_leave":
             return handle_apply_leave(employee_row, clean_question, arguments)
         if tool_name == "cancel_leave":
@@ -345,6 +360,6 @@ def answer_chat_message(employee, question, history=None):
             return build_reply(clean_question, payroll_service.answer_payslip_question(employee, arguments.get("month")))
         policy_question = (arguments.get("standalone_question") or "").strip() or clean_question       # a follow-up becomes a full question
         return dict(answer_question(policy_question), question=clean_question, pending_action=None)     # search_policy or an unknown tool
-    except (LeaveError, payroll_service.PayrollError, people_service.PeopleError) as error:
+    except (LeaveError, payroll_service.PayrollError, people_service.PeopleError, attendance_service.AttendanceError) as error:
         # A broken rule is a normal answer ("You have only 3 days left"), not a server error.
         return build_reply(clean_question, error.message)

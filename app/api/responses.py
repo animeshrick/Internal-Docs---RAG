@@ -19,6 +19,8 @@ class LoginResponse(BaseModel):
     role: str
     full_name: str
     emp_id: str
+    # What the website shows: "hr", "pm", "employee", or "none" (the CEO and the CTO have no attendance section).
+    attendance_access: str = "none"
 
 
 class CredentialsResponse(BaseModel):
@@ -73,3 +75,90 @@ class ProfileResponse(BaseModel):
     emergency_contact: str | None = None
     manager_name: str | None = None
     is_active: bool
+
+
+# ------------------------------------------------------------------ attendance
+class AttendanceTodayResponse(BaseModel):
+    """Today's state for the check-in / check-out buttons. Times are UTC text; the website shows them in India time."""
+
+    work_date: str
+    day_note: str | None = None          # why nothing is expected today (weekend, holiday, leave)
+    checked_in_at: str | None = None
+    checked_out_at: str | None = None
+    status: str
+    is_late: bool
+    is_early_leave: bool
+    worked_minutes: int | None = None
+    can_check_in: bool
+    can_check_out: bool
+    office_start: str
+    office_end: str
+    late_after: str
+    network_check_enabled: bool
+
+
+class AttendanceDay(BaseModel):
+    """One day of a calendar. status: present, half_day, absent, incomplete, on_leave, holiday, weekend, checked_in, not_checked_in."""
+
+    date: str
+    weekday: str
+    status: str
+    check_in_at: str | None = None
+    check_out_at: str | None = None
+    worked_minutes: int | None = None
+    is_late: bool = False
+    is_early_leave: bool = False
+    note: str | None = None
+
+
+class AttendanceSummary(BaseModel):
+    present: int
+    half_day: int
+    absent: int
+    incomplete: int
+    on_leave: int
+    holiday: int
+    weekend: int
+    checked_in: int
+    not_checked_in: int
+    late_days: int
+    early_leave_days: int
+    worked_minutes: int
+
+
+class AttendanceMonthResponse(BaseModel):
+    emp_id: str
+    full_name: str
+    month: str
+    days: list[AttendanceDay]
+    summary: AttendanceSummary
+
+
+class AttendancePersonDay(AttendanceDay):
+    emp_id: str
+    full_name: str
+    dept: str | None = None
+
+
+class AttendanceTeamResponse(BaseModel):
+    date: str
+    people: list[AttendancePersonDay]
+    summary: AttendanceSummary
+
+
+class AttendanceCorrection(BaseModel):
+    id: int
+    employee_id: int
+    emp_id: str | None = None
+    full_name: str | None = None
+    dept: str | None = None
+    work_date: str
+    requested_check_in: str | None = None
+    requested_check_out: str | None = None
+    current_check_in_at: str | None = None
+    current_check_out_at: str | None = None
+    reason: str
+    status: str
+    decided_at: str | None = None
+    decision_note: str | None = None
+    created_at: str

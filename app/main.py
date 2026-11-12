@@ -14,6 +14,17 @@ Endpoints:
     POST /login                           emp_id + password -> token
     POST /change-password                 any logged-in employee (also the first step with a temporary password)
     GET  /me                              who am I
+    GET  /me/profile                      my own details
+    GET  /attendance/today                my check-in state for today
+    POST /attendance/check-in             check in (office network only, when the network check is on)
+    POST /attendance/check-out            check out
+    GET  /attendance/mine                 my month (?month=2026-11)
+    GET  /attendance/team                 HR and PM: everybody below me on one day (?date=2026-11-12)
+    GET  /attendance/person/{emp_id}      HR and PM: one person's month
+    POST /attendance/corrections          ask for a missed check-in / check-out (within 7 days)
+    GET  /attendance/corrections/mine     my correction requests
+    GET  /attendance/corrections/inbox    HR and PM: waiting requests of the people below me
+    POST /attendance/corrections/{id}/decision   approve or reject
     POST /chat                            policy questions + my leave (apply / cancel with "reply yes to confirm")
     GET  /leave/balances                  my leave numbers
     GET  /leave/mine                      my leave requests
@@ -47,8 +58,10 @@ from starlette.concurrency import run_in_threadpool
 from app.api.limits import ALLOWED_DOCUMENT_TYPES, MAXIMUM_DOCUMENT_BYTES
 from app.api.requests import (
     AttachDocumentRequest,
+    AttendanceCorrectionRequest,
     ChangePasswordRequest,
     ChatRequest,
+    CorrectionDecisionRequest,
     LeaveApplyRequest,
     LeaveDecisionRequest,
     LoginRequest,
@@ -56,6 +69,10 @@ from app.api.requests import (
     ResetPasswordRequest,
 )
 from app.api.responses import (
+    AttendanceCorrection,
+    AttendanceMonthResponse,
+    AttendanceTeamResponse,
+    AttendanceTodayResponse,
     ChatHistoryMessage,
     ChatResponse,
     CredentialsResponse,
@@ -64,6 +81,7 @@ from app.api.responses import (
 )
 from app.core.logs import setup_logging
 from app.identity import auth
+from app.hr.attendance import service as attendance_service
 from app.hr.leave import service as leave_service
 from app.hr.leave import store as leave_store
 from app.hr.payroll import service as payroll_service
@@ -73,6 +91,7 @@ from app.rag.answer.assistant import answer_chat_message
 from app.chat import store as chat_store
 from app.hr.people import service as people_service
 from app.identity.auth import AuthError
+from app.hr.attendance.service import AttendanceError
 from app.hr.leave.service import LeaveError
 from app.hr.payroll.service import PayrollError
 
@@ -116,6 +135,12 @@ def handle_leave_error(request, error):
     return JSONResponse(status_code=error.status_code, content={"detail": error.message, "code": "leave_rule"})
 
 
+@app.exception_handler(AttendanceError)
+def handle_attendance_error(request, error):
+    """A broken attendance rule (for example "you already checked in") becomes a normal JSON error."""
+    return JSONResponse(status_code=error.status_code, content={"detail": error.message, "code": "attendance_rule"})
+
+
 # ------------------------------------------------------------------ who is calling?
 def get_current_employee(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
     """Any valid login token. Used by /change-password."""
@@ -151,7 +176,9 @@ def health_check():
 @app.post("/login", response_model=LoginResponse)
 def login(request: LoginRequest):
     """Employee id + password in, token out."""
-    return auth.authenticate(request.emp_id, request.password)
+    result = auth.authenticate(request.emp_id, request.password)
+    # The website hides the attendance section for the CEO and the CTO, and shows the team pages to HR and the PM.
+    return dict(result, attendance_access=attendance_service.get_access_level(result) or "none")
 
 
 @app.post("/change-password")
@@ -180,7 +207,8 @@ def reset_password(request: ResetPasswordRequest, hr_employee: dict = Depends(re
 @app.get("/me")
 def read_me(employee: dict = Depends(get_current_employee)):
     """Who is logged in. Works even before the temporary password is changed."""
-    return {k: employee[k] for k in ("emp_id", "full_name", "dept", "role", "must_change_password")}
+    return dict({k: employee[k] for k in ("emp_id", "full_name", "dept", "role", "must_change_password")},
+                attendance_access=attendance_service.get_access_level(employee) or "none")
 
 
 # These are normal "def" endpoints (not "async def") on purpose: they make blocking network calls,
@@ -230,6 +258,70 @@ def chat_history(limit: int = Query(chat_store.MESSAGES_KEPT_PER_EMPLOYEE, ge=1,
     """My own saved chat messages, oldest first. The database keeps only the newest
     chat_store.MESSAGES_KEPT_PER_EMPLOYEE of them, so there is normally no older page."""
     return chat_store.list_messages(employee["employee_id"], limit, before_id)
+
+
+# ------------------------------------------------------------------ attendance
+def get_client_ip(request: Request):
+    """The address the request came from. Behind a proxy (set TRUST_PROXY_HEADERS=true) it is the first X-Forwarded-For address."""
+    if os.getenv("TRUST_PROXY_HEADERS", "").strip().lower() == "true":
+        forwarded_for = request.headers.get("x-forwarded-for", "")
+        if forwarded_for:
+            return forwarded_for.split(",")[0].strip()
+    return request.client.host if request.client else ""
+
+
+@app.get("/attendance/today", response_model=AttendanceTodayResponse)
+def attendance_today(employee: dict = Depends(get_ready_employee)):
+    return attendance_service.get_today_state(employee)
+
+
+@app.post("/attendance/check-in", response_model=AttendanceTodayResponse)
+def attendance_check_in(request: Request, employee: dict = Depends(get_ready_employee)):
+    return attendance_service.check_in(employee, get_client_ip(request))
+
+
+@app.post("/attendance/check-out", response_model=AttendanceTodayResponse)
+def attendance_check_out(request: Request, employee: dict = Depends(get_ready_employee)):
+    return attendance_service.check_out(employee, get_client_ip(request))
+
+
+@app.get("/attendance/mine", response_model=AttendanceMonthResponse)
+def attendance_mine(month: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}$"), employee: dict = Depends(get_ready_employee)):
+    return attendance_service.get_my_month(employee, month)
+
+
+@app.get("/attendance/team", response_model=AttendanceTeamResponse)
+def attendance_team(date: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"), employee: dict = Depends(get_ready_employee)):
+    """HR and the PM: everybody below them on one day (today when no date is given)."""
+    return attendance_service.get_team_day(employee, date)
+
+
+@app.get("/attendance/person/{emp_id}", response_model=AttendanceMonthResponse)
+def attendance_person(emp_id: str, month: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}$"),
+                      employee: dict = Depends(get_ready_employee)):
+    return attendance_service.get_person_month(employee, emp_id, month)
+
+
+@app.post("/attendance/corrections", response_model=AttendanceCorrection)
+def attendance_ask_correction(request: AttendanceCorrectionRequest, employee: dict = Depends(get_ready_employee)):
+    return attendance_service.create_correction(employee, request.work_date, request.check_in_time, request.check_out_time, request.reason)
+
+
+@app.get("/attendance/corrections/mine", response_model=list[AttendanceCorrection])
+def attendance_my_corrections(employee: dict = Depends(get_ready_employee)):
+    return attendance_service.list_my_corrections(employee)
+
+
+@app.get("/attendance/corrections/inbox", response_model=list[AttendanceCorrection])
+def attendance_correction_inbox(employee: dict = Depends(get_ready_employee)):
+    return attendance_service.list_correction_inbox(employee)
+
+
+@app.post("/attendance/corrections/{correction_id}/decision", response_model=AttendanceCorrection)
+def attendance_decide_correction(correction_id: int, request: CorrectionDecisionRequest, employee: dict = Depends(get_ready_employee)):
+    decided = attendance_service.decide_correction(employee, correction_id, request.decision, request.note)
+    logger.info("Attendance correction %s %s by %s", correction_id, request.decision, employee["emp_id"])
+    return decided
 
 
 # ------------------------------------------------------------------ leave (website)

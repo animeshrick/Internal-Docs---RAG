@@ -43,6 +43,21 @@ class ChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=MAXIMUM_QUESTION_LENGTH)
 
 
+# ------------------------------------------------------------------ attendance
+class AttendanceCorrectionRequest(BaseModel):
+    """A missed check-in or check-out. The times are 24 hour India time, for example 10:05 or 19:10."""
+
+    work_date: datetime.date
+    check_in_time: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    check_out_time: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    reason: str = Field(min_length=3, max_length=300)
+
+
+class CorrectionDecisionRequest(BaseModel):
+    decision: Literal["approved", "rejected"]
+    note: str | None = Field(default=None, max_length=300)
+
+
 # ------------------------------------------------------------------ leave
 class LeaveApplyRequest(BaseModel):
     leave_type: str = Field(min_length=1, max_length=30)
