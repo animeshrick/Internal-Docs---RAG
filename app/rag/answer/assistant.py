@@ -351,6 +351,7 @@ def answer_chat_message(employee, question, history=None):
             attendance_text = attendance_service.build_chat_text(employee, arguments.get("person"), (arguments.get("month") or "").strip() or None)
             return answer_with_employee_data(clean_question, attendance_text)
         if tool_name == "apply_leave":
+            leave_service.refuse_superadmin(employee)
             return handle_apply_leave(employee_row, clean_question, arguments)
         if tool_name == "cancel_leave":
             return handle_cancel_leave(employee_row, clean_question, arguments)

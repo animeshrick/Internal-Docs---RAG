@@ -63,6 +63,8 @@ from app.api.requests import (
     ChatRequest,
     CorrectionDecisionRequest,
     LeaveApplyRequest,
+    SuperadminAttendanceRequest,
+    SuperadminLeaveRequest,
     LeaveDecisionRequest,
     LoginRequest,
     RegisterRequest,
@@ -90,7 +92,8 @@ from app.files import storage as storage_store
 from app.rag.answer.assistant import answer_chat_message
 from app.chat import store as chat_store
 from app.hr.people import service as people_service
-from app.identity.auth import AuthError
+from app.hr.superadmin import service as superadmin_service
+from app.identity.auth import HR_LEVEL_ROLES, AuthError
 from app.hr.attendance.service import AttendanceError
 from app.hr.leave.service import LeaveError
 from app.hr.payroll.service import PayrollError
@@ -158,8 +161,15 @@ def get_ready_employee(employee: dict = Depends(get_current_employee)):
 
 def require_hr(employee: dict = Depends(get_ready_employee)):
     """Only HR may continue."""
-    if employee["role"] != "hr":
+    if employee["role"] not in HR_LEVEL_ROLES:
         raise AuthError(403, "Only HR can do this.")
+    return employee
+
+
+def require_superadmin(employee: dict = Depends(get_ready_employee)):
+    """Only the super admin may continue."""
+    if employee["role"] != "superadmin":
+        raise AuthError(403, "Only the super admin can do this.")
     return employee
 
 
@@ -324,6 +334,43 @@ def attendance_decide_correction(correction_id: int, request: CorrectionDecision
     return decided
 
 
+@app.get("/celebrations")
+def celebrations(employee: dict = Depends(get_ready_employee)):
+    """Birthdays and work anniversaries of today (India date), for the home page."""
+    return people_service.get_celebrations(leave_service.get_today())
+
+
+# ------------------------------------------------------------------ super admin
+@app.get("/superadmin/employees")
+def superadmin_employees(admin: dict = Depends(require_superadmin)):
+    return superadmin_service.list_employees(admin)
+
+
+@app.get("/superadmin/leave-types")
+def superadmin_leave_types(admin: dict = Depends(require_superadmin)):
+    return superadmin_service.list_leave_types(admin)
+
+
+@app.get("/superadmin/leave-balances/{emp_id}")
+def superadmin_leave_balances(emp_id: str, on_date: datetime.date | None = None, admin: dict = Depends(require_superadmin)):
+    return superadmin_service.get_leave_balances(admin, emp_id, on_date or leave_service.get_today())
+
+
+@app.post("/superadmin/leave")
+def superadmin_apply_leave(request: SuperadminLeaveRequest, admin: dict = Depends(require_superadmin)):
+    result = superadmin_service.apply_leave(admin, request.emp_id, request.leave_type, request.start_date, request.end_date,
+                                            request.day_type, request.reason)
+    logger.info("Super admin %s applied leave %s for %s", admin["emp_id"], result["leave_id"], request.emp_id)
+    return result
+
+
+@app.post("/superadmin/attendance")
+def superadmin_mark_attendance(request: SuperadminAttendanceRequest, admin: dict = Depends(require_superadmin)):
+    result = superadmin_service.mark_attendance(admin, request.emp_id, request.work_date, request.check_in_time, request.check_out_time)
+    logger.info("Super admin %s set attendance of %s on %s", admin["emp_id"], request.emp_id, request.work_date)
+    return result
+
+
 # ------------------------------------------------------------------ leave (website)
 def load_employee_row(employee):
     """The full employee row (gender, manager ...) of the logged-in employee."""
@@ -382,6 +429,7 @@ async def upload_leave_document(request: Request, filename: str = Query(min_leng
 @app.post("/leave/apply")
 def apply_leave(request: LeaveApplyRequest, employee: dict = Depends(get_ready_employee)):
     """Apply on the website. Maternity leave can only be applied here (document required)."""
+    leave_service.refuse_superadmin(employee)
     result = leave_service.apply_on_website(
         load_employee_row(employee), 
         request.leave_type, 

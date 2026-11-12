@@ -14,7 +14,7 @@ Rules (agreed with HR):
 from datetime import date, datetime, timedelta, timezone
 
 from app.hr.leave import store as leave_store
-from app.identity.auth import parse_timestamp
+from app.identity.auth import HR_LEVEL_ROLES, parse_timestamp
 
 BACKDATE_LIMIT_DAYS = 7
 LEAVE_YEAR_START_MONTH = 4      # the leave year starts on 1 April (keep equal to the value in sql/04_leave_system.sql)
@@ -82,13 +82,17 @@ def describe_leave_row(leave_row, leave_types):
 
 
 # ------------------------------------------------------------------ checking a new leave
-def check_new_leave(employee_row, leave_type_code, start_date, end_date, day_type, applied_by_chat, document_path=None):
+def check_new_leave(employee_row, leave_type_code, start_date, end_date, day_type, applied_by_chat, document_path=None,
+                    skip_backdate_limit=False, require_document=True, person_label=None):
     """
     Check every rule and return the details to save, or raise LeaveError with a message for the employee.
-    Nothing is saved here.
+    Nothing is saved here. person_label is the employee's name when someone else (the super admin) applies for them; the messages
+    then talk about that person ("Ann has only ...") instead of "you".
     """
+    who = person_label or "You"
+    has = "has" if person_label else "have"
     if not employee_row or not employee_row["is_active"]:
-        raise LeaveError("Your employee record is not active.", 403)
+        raise LeaveError(f"{person_label}'s employee record is not active." if person_label else "Your employee record is not active.", 403)
 
     leave_types = leave_store.get_leave_types()
     leave_type = leave_types.get(str(leave_type_code or "").strip().lower())
@@ -97,10 +101,10 @@ def check_new_leave(employee_row, leave_type_code, start_date, end_date, day_typ
                            if t["applies_to_gender"] in (None, employee_row.get("gender")) and t["can_apply_by_chat"]]
         raise LeaveError(f"I do not know that leave type. You can choose: {', '.join(available_names)}.")
     if leave_type["applies_to_gender"] and leave_type["applies_to_gender"] != employee_row.get("gender"):
-        raise LeaveError(f"{leave_type['name']} is not available for you.")
+        raise LeaveError(f"{leave_type['name']} is not available for {person_label or 'you'}.")
     if applied_by_chat and not leave_type["can_apply_by_chat"]:
         raise LeaveError(f"{leave_type['name']} cannot be applied in the chat. Please apply on the website, with the supporting document.")
-    if not leave_type["can_apply_by_chat"] and not document_path:
+    if require_document and not leave_type["can_apply_by_chat"] and not document_path:
         raise LeaveError(f"{leave_type['name']} needs a supporting document. Please upload one.")
 
     if day_type not in ("full", "half"):
@@ -112,7 +116,7 @@ def check_new_leave(employee_row, leave_type_code, start_date, end_date, day_typ
 
     today = get_today()
     earliest_allowed_date = today - timedelta(days=BACKDATE_LIMIT_DAYS)
-    if start_date < earliest_allowed_date:
+    if not skip_backdate_limit and start_date < earliest_allowed_date:
         raise LeaveError(f"You can apply for past dates only up to {BACKDATE_LIMIT_DAYS} days back. "
                          f"The earliest date allowed today is {format_date(earliest_allowed_date)}.")
 
@@ -129,7 +133,7 @@ def check_new_leave(employee_row, leave_type_code, start_date, end_date, day_typ
     overlapping = leave_store.find_overlapping_requests(employee_row["id"], start_date, end_date)
     if overlapping:
         first = overlapping[0]
-        raise LeaveError(f"You already have a {first['status']} {first['leave_type']} leave from "
+        raise LeaveError(f"{who} already {has} a {first['status']} {first['leave_type']} leave from "
                          f"{first['start_date']} to {first['end_date']} that overlaps these dates.")
 
     if leave_type["limit_type"] == "per_year":
@@ -137,7 +141,7 @@ def check_new_leave(employee_row, leave_type_code, start_date, end_date, day_typ
                         if row["type_code"] == leave_type["code"]), None)
         remaining_days = float(balance["remaining_days"]) if balance else 0.0
         if days > remaining_days:
-            raise LeaveError(f"You have only {format_days(remaining_days)} of {leave_type['name']} left for {leave_year_label(start_date)}, "
+            raise LeaveError(f"{who} {has} only {format_days(remaining_days)} of {leave_type['name']} left for {leave_year_label(start_date)}, "
                              f"and this request needs {format_days(days)}.")
     elif days > float(leave_type["days_allowed"]):
         raise LeaveError(f"{leave_type['name']} allows at most {float(leave_type['days_allowed']):g} days per request.")
@@ -151,6 +155,12 @@ def check_new_leave(employee_row, leave_type_code, start_date, end_date, day_typ
         "days": days,
         "document_path": document_path,
     }
+
+
+def refuse_superadmin(person):
+    """The super admin is an admin account only: it has no leave of its own (it can apply leave for others)."""
+    if person.get("role") == "superadmin":
+        raise LeaveError("The super admin has no leave of its own.", 403)
 
 
 def is_pm(person):
@@ -229,7 +239,7 @@ def can_decide(approver, leave_row, requester_row, leave_type):
     """
     if leave_row["employee_id"] == approver["employee_id"]:
         return False                                          # nobody approves their own leave
-    if approver["role"] == "hr":
+    if approver["role"] in HR_LEVEL_ROLES:
         return True
     if leave_type.get("approver") == "hr_only" or is_pm(requester_row):
         return False
@@ -240,7 +250,7 @@ def can_decide(approver, leave_row, requester_row, leave_type):
 
 def list_approvals(approver):
     """Pending leaves this person may decide, with the employee's name."""
-    if approver["role"] == "hr":
+    if approver["role"] in HR_LEVEL_ROLES:
         pending_rows = leave_store.list_pending_requests()
     else:
         candidate_ids = leave_store.list_direct_report_ids(approver["employee_id"])

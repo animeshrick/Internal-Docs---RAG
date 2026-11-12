@@ -11,12 +11,14 @@ Rules:
 The AI only picks a tool and a name. This code decides, and it runs before any data is read.
 """
 import re
+from datetime import date
 
 from app.hr.leave import service as leave_service
 from app.hr.leave import store as leave_store
 from app.hr.payroll import service as payroll_service
 from app.hr.payroll import store as payroll_store
 from app.hr.people import store as people_store
+from app.identity.auth import HR_LEVEL_ROLES
 
 NO_ANSWER = "I don't have an answer for this question."
 NOT_FOUND = "I could not find exactly one employee with that name or ID."
@@ -48,7 +50,7 @@ def resolve_target(requester, person_text):
     """
     if is_asking_about_self(requester, person_text):
         return None
-    if requester["role"] != "hr":
+    if requester["role"] not in HR_LEVEL_ROLES:
         raise PeopleError(NO_ANSWER)
     if PROTECTED_TITLES.search(person_text or ""):
         raise PeopleError(NO_ANSWER)
@@ -108,3 +110,42 @@ def build_profile_text(target):
     else:
         lines.append("No leave requests yet.")
     return "\n".join(lines)
+
+
+# ------------------------------------------------------------------ birthdays and work anniversaries (home page)
+def falls_on(day_of_year_start, today):
+    """True when a date (a birthday or a joining date) has today's day and month. A 29 February is celebrated on 28 February in other years."""
+    if day_of_year_start is None:
+        return False
+    if (day_of_year_start.month, day_of_year_start.day) == (2, 29) and not _is_leap_year(today.year):
+        return (today.month, today.day) == (2, 28)
+    return (day_of_year_start.month, day_of_year_start.day) == (today.month, today.day)
+
+
+def _is_leap_year(year):
+    return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
+
+
+def get_celebrations(today):
+    """
+    Who has a birthday or a work anniversary today. Shown to every logged-in person, so it holds only a name, a department and the
+    number of years of an anniversary (never the age or the date). The CEO, the CTO (confidential) and the super admin are left out.
+    """
+    celebrations = []
+    for person in people_store.list_dates_of_active_employees():
+        if person.get("role") in ("ceo", "superadmin") or person.get("is_confidential"):
+            continue
+        base = {"emp_id": person["emp_id"], "full_name": person["full_name"], "dept": person.get("dept")}
+        birthday, joined = _parse_date(person.get("dob")), _parse_date(person.get("doj"))
+        if falls_on(birthday, today):
+            celebrations.append(dict(base, kind="birthday", years=None))
+        if falls_on(joined, today) and today.year > joined.year:
+            celebrations.append(dict(base, kind="anniversary", years=today.year - joined.year))
+    return celebrations
+
+
+def _parse_date(value):
+    try:
+        return date.fromisoformat(str(value)[:10]) if value else None
+    except ValueError:
+        return None

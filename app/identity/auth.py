@@ -22,7 +22,8 @@ import jwt
 from app.hr.employees import store as employee_store
 from app.core.config import get_required_setting
 
-ALLOWED_ROLES = ("employee", "hr", "ceo", "pm")      # pm = project manager: approves leave, but has no HR powers
+ALLOWED_ROLES = ("employee", "hr", "ceo", "pm", "superadmin")      # pm = project manager: approves leave, but has no HR powers
+HR_LEVEL_ROLES = ("hr", "superadmin")      # a super admin can do everything HR can, and more (see hr/superadmin)
 
 BCRYPT_ROUNDS = 12                   # higher = slower for attackers (and for us)
 MAXIMUM_PASSWORD_BYTES = 72          # bcrypt cannot use more than 72 bytes

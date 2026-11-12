@@ -53,6 +53,26 @@ class AttendanceCorrectionRequest(BaseModel):
     reason: str = Field(min_length=3, max_length=300)
 
 
+class SuperadminLeaveRequest(BaseModel):
+    """Leave applied by the super admin for someone. It is approved at once."""
+
+    emp_id: str = Field(min_length=1, max_length=50)
+    leave_type: str = Field(min_length=1, max_length=30)
+    start_date: datetime.date
+    end_date: datetime.date | None = None
+    day_type: Literal["full", "half"] = "full"
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class SuperadminAttendanceRequest(BaseModel):
+    """The times (24 hour India time) the super admin sets for one person on one day."""
+
+    emp_id: str = Field(min_length=1, max_length=50)
+    work_date: datetime.date
+    check_in_time: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    check_out_time: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+
+
 class CorrectionDecisionRequest(BaseModel):
     decision: Literal["approved", "rejected"]
     note: str | None = Field(default=None, max_length=300)

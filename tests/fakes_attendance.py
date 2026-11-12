@@ -18,6 +18,7 @@ PEOPLE = {
     5: ("EMP-5", "Cleo CEO", "Management", "ceo", False),
     6: ("EMP-6", "Tia CTO", "Tech", "employee", True),
     7: ("EMP-7", "Harry HR", "HR", "hr", False),
+    8: ("EMP-8", "Sue Super", "Management", "superadmin", False),
 }
 
 

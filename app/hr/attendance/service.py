@@ -33,10 +33,11 @@ from app.hr.people import service as people_service
 from app.hr.people import store as people_store
 from app.identity.auth import parse_timestamp
 
+LEVEL_SUPERADMIN = "superadmin"
 LEVEL_HR = "hr"
 LEVEL_PM = "pm"
 LEVEL_EMPLOYEE = "employee"
-LEVEL_RANK = {LEVEL_HR: 1, LEVEL_PM: 2, LEVEL_EMPLOYEE: 3}      # a smaller number is higher in the hierarchy
+LEVEL_RANK = {LEVEL_SUPERADMIN: 0, LEVEL_HR: 1, LEVEL_PM: 2, LEVEL_EMPLOYEE: 3}      # a smaller number is higher in the hierarchy
 
 AUTO_APPROVAL_NOTE = "Auto"
 WEEKDAY_NAMES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
@@ -68,7 +69,9 @@ def normalise_person(person):
 
 
 def get_access_level(person):
-    """'hr', 'pm' or 'employee'. None for the CEO and the CTO (no attendance for them)."""
+    """'superadmin', 'hr', 'pm' or 'employee'. None for the CEO and the CTO (no attendance for them)."""
+    if person.get("role") == "superadmin":
+        return LEVEL_SUPERADMIN             # first, so a confidential super admin still has the team pages
     if person.get("role") == "ceo" or person.get("is_confidential"):
         return None
     if person.get("role") == "hr":
@@ -79,16 +82,18 @@ def get_access_level(person):
 
 
 def require_attendance(person):
-    """Stops the CEO and the CTO. Returns the person's level."""
+    """For a person's OWN attendance. Stops the CEO, the CTO and the super admin (an admin account only). Returns the level."""
     level = get_access_level(person)
-    if level is None:
+    if level is None or level == LEVEL_SUPERADMIN:
         raise AttendanceError("Attendance is not available for your account.", 403)
     return level
 
 
 def require_viewer(viewer):
     """Only HR and the PM may look at other people."""
-    level = require_attendance(viewer)
+    level = get_access_level(viewer)
+    if level is None:
+        raise AttendanceError("Attendance is not available for your account.", 403)
     if level == LEVEL_EMPLOYEE:
         raise AttendanceError("Only HR and the PM can see other people's attendance.", 403)
     return level
@@ -418,20 +423,25 @@ def merge_times(existing_row, requested_in, requested_out):
     return final_in, final_out
 
 
-def apply_correction(correction_row, settings):
-    """Write the corrected times of an approved request into the daily record."""
-    employee_id, work_date = correction_row["employee_id"], correction_row["work_date"]
-    requested_in = parse_timestamp(correction_row["requested_check_in"]) if correction_row["requested_check_in"] else None
-    requested_out = parse_timestamp(correction_row["requested_check_out"]) if correction_row["requested_check_out"] else None
+def write_day(employee_id, work_date, requested_in, requested_out, source, settings):
+    """Save the times of one day (a new record, or the existing one with the given times replaced). Returns the saved fields."""
     existing_row = attendance_store.get_attendance(employee_id, work_date)
     final_in, final_out = merge_times(existing_row, requested_in, requested_out)
     evaluation = evaluate_day(final_in, final_out, settings)
     fields = {"check_in_at": final_in.isoformat(), "check_out_at": final_out.isoformat() if final_out else None,
-              "source": "correction", **evaluation}
+              "source": source, **evaluation}
     if existing_row:
         attendance_store.update_attendance(existing_row["id"], fields)
     else:
         attendance_store.insert_attendance(dict(fields, employee_id=employee_id, work_date=work_date))
+    return fields
+
+
+def apply_correction(correction_row, settings):
+    """Write the corrected times of an approved request into the daily record."""
+    requested_in = parse_timestamp(correction_row["requested_check_in"]) if correction_row["requested_check_in"] else None
+    requested_out = parse_timestamp(correction_row["requested_check_out"]) if correction_row["requested_check_out"] else None
+    write_day(correction_row["employee_id"], correction_row["work_date"], requested_in, requested_out, "correction", settings)
 
 
 def finish_correction(correction_row, decided_by_id, decision, note, settings):
@@ -495,7 +505,7 @@ def create_correction(employee, work_date, check_in_text, check_out_text, reason
     except attendance_store.AttendanceConflictError:
         raise AttendanceError("You already have a waiting correction request for that day.", 409)
 
-    if level == LEVEL_HR:
+    if level in (LEVEL_HR, LEVEL_SUPERADMIN):
         # Nobody is above HR in this section, so HR's own request is approved at once.
         row = finish_correction(row, employee["employee_id"], "approved", AUTO_APPROVAL_NOTE, settings)
     return describe_correction(row, {employee["employee_id"]: employee})
@@ -559,8 +569,10 @@ def build_chat_text(viewer, person_text, month_text):
     The attendance of the viewer (empty person_text) or, for HR and the PM, of someone below them. Plain text for the AI to phrase.
     Everyone who may not see the person gets the same short answer as for an unknown person.
     """
-    require_attendance(viewer)
+    if get_access_level(viewer) is None:
+        raise AttendanceError("Attendance is not available for your account.", 403)
     if people_service.is_asking_about_self(viewer, person_text):
+        require_attendance(viewer)
         person, owner_line = viewer, ""
     else:
         if get_access_level(viewer) == LEVEL_EMPLOYEE or people_service.PROTECTED_TITLES.search(person_text or ""):

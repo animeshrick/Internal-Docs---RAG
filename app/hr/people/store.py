@@ -35,3 +35,10 @@ def find_employee(person_text):
 def get_profile(employee_id):
     rows = read_rows("employee", {"select": PROFILE_COLUMNS, "id": f"eq.{employee_id}", "limit": 1}, "Reading the employee")
     return flatten_role(rows[0]) if rows else None
+
+
+def list_dates_of_active_employees():
+    """Name, department, birthday and joining date of every active employee (for the birthday and anniversary wishes on the home page)."""
+    rows = read_rows("employee", {"select": "id,emp_id,full_name,dept,dob,doj,is_confidential,employee_auth(role)", "is_active": "eq.true",
+                                  "order": "full_name.asc"}, "Reading the employees")
+    return [flatten_role(row) for row in rows]
