@@ -50,6 +50,31 @@ def find_employee_with_login(emp_id=None, employee_id=None):
     return employee
 
 
+def find_employee_by_email(email):
+    """Find one employee by email (used before creating a new employee, to give a clear "already used" error)."""
+    response = requests.get(
+        get_table_url(EMPLOYEE_TABLE_NAME),
+        headers=build_headers(),
+        params={"select": "id,emp_id,email", "email": f"eq.{email}", "limit": 1},
+        timeout=REQUEST_TIMEOUT_SECONDS,
+    )
+    check_response(response, "Reading the employee")
+    rows = response.json()
+    return rows[0] if rows else None
+
+
+def insert_employee(fields):
+    """Create a brand-new employee row (no login yet). Returns the row Supabase saved, with its new id."""
+    response = requests.post(
+        get_table_url(EMPLOYEE_TABLE_NAME),
+        headers=build_headers({"Prefer": "return=representation"}),
+        json=fields,
+        timeout=REQUEST_TIMEOUT_SECONDS,
+    )
+    check_response(response, "Creating the employee")
+    return response.json()[0]
+
+
 def insert_login(employee_id, password_hash, role):
     """Create the login row for an employee."""
     response = requests.post(

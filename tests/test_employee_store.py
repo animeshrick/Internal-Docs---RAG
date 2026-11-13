@@ -106,3 +106,37 @@ def test_list_employees_without_login_skips_inactive_and_existing(monkeypatch):
 
     monkeypatch.setattr(requests, "get", fake_get)
     assert [row["emp_id"] for row in employee_store.list_employees_without_login()] == ["B"]
+
+
+def test_find_by_email_builds_a_safe_filter(monkeypatch):
+    seen = {}
+
+    def fake_get(url, headers, params, timeout):
+        seen.update(params)
+        return FakeResponse([{"id": 9, "emp_id": "EMP009", "email": "a@x.com"}])
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    row = employee_store.find_employee_by_email("a@x.com")
+
+    assert seen["email"] == "eq.a@x.com"
+    assert row["emp_id"] == "EMP009"
+
+
+def test_find_by_email_returns_none_when_nobody_has_it(monkeypatch):
+    monkeypatch.setattr(requests, "get", lambda url, headers, params, timeout: FakeResponse([]))
+    assert employee_store.find_employee_by_email("nobody@x.com") is None
+
+
+def test_insert_employee_sends_the_fields_and_returns_the_saved_row(monkeypatch):
+    sent = {}
+
+    def fake_post(url, headers, json, timeout):
+        sent["url"], sent["json"] = url, json
+        return FakeResponse([{"id": 11, "emp_id": "EMP011", "full_name": "New Person", "email": "n@x.com"}])
+
+    monkeypatch.setattr(requests, "post", fake_post)
+    row = employee_store.insert_employee({"emp_id": "EMP011", "full_name": "New Person", "email": "n@x.com"})
+
+    assert sent["url"] == "https://example.supabase.co/rest/v1/employee"
+    assert sent["json"] == {"emp_id": "EMP011", "full_name": "New Person", "email": "n@x.com"}
+    assert row["id"] == 11

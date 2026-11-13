@@ -99,6 +99,63 @@ def require_viewer(viewer):
     return level
 
 
+# ------------------------------------------------------------------ office network admin (HR only)
+def require_hr_level(viewer):
+    """Only HR (or the super admin account) may change the office network settings."""
+    if viewer.get("role") not in (LEVEL_HR, LEVEL_SUPERADMIN):
+        raise AttendanceError("Only HR can do this.", 403)
+
+
+def describe_office_network(network):
+    return {"id": network["id"], "label": network["label"], "cidr": network["cidr"], "is_active": bool(network["is_active"])}
+
+
+def get_admin_settings(viewer):
+    """The network check switch and every office network (active or not), for the admin page."""
+    require_hr_level(viewer)
+    settings_row = attendance_store.get_settings()
+    networks = attendance_store.list_all_office_networks()
+    return {"network_check_enabled": bool(settings_row["network_check_enabled"]),
+            "office_networks": [describe_office_network(network) for network in networks]}
+
+
+def add_office_network(viewer, label, cidr):
+    """Add one office network (for example '203.0.113.0/24'), active by default."""
+    require_hr_level(viewer)
+    label = (label or "").strip()
+    cidr = (cidr or "").strip()
+    if not label:
+        raise AttendanceError("Please give the network a label, for example 'Kolkata office'.")
+    try:
+        ipaddress.ip_network(cidr, strict=False)
+    except ValueError:
+        raise AttendanceError("That is not a valid network address. Give it like 203.0.113.0/24, or a single address like 203.0.113.7/32.")
+    network = attendance_store.insert_office_network({"label": label, "cidr": cidr, "is_active": True})
+    return describe_office_network(network)
+
+
+def set_office_network_active(viewer, network_id, is_active):
+    """Turn one office network on or off, without deleting it."""
+    require_hr_level(viewer)
+    network = attendance_store.update_office_network(network_id, {"is_active": bool(is_active)})
+    if network is None:
+        raise AttendanceError("I could not find that office network.", 404)
+    return describe_office_network(network)
+
+
+def set_network_check(viewer, enabled):
+    """Turn the office-network restriction on check-in and check-out on or off.
+
+    Turning it on with no active office network would lock everyone out of check-in and
+    check-out at once, so that is refused: add and activate at least one network first.
+    """
+    require_hr_level(viewer)
+    if enabled and not attendance_store.list_active_office_networks():
+        raise AttendanceError("Add at least one active office network first. Turning this on now would lock everyone out of check-in and check-out.")
+    attendance_store.update_settings({"network_check_enabled": bool(enabled)})
+    return {"network_check_enabled": bool(enabled)}
+
+
 def can_view(viewer, target):
     """True when the viewer is the person themself, or is strictly higher in the hierarchy than the target."""
     viewer, target = normalise_person(viewer), normalise_person(target)

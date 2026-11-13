@@ -36,6 +36,21 @@ class ResetPasswordRequest(BaseModel):
     emp_id: str = Field(min_length=1, max_length=50)
 
 
+class CreateEmployeeRequest(BaseModel):
+    """A brand-new employee row. HR fills this in once, then calls /register to create a login for them."""
+
+    emp_id: str = Field(min_length=1, max_length=50)
+    full_name: str = Field(min_length=1, max_length=200)
+    email: str = Field(min_length=3, max_length=200)
+    dept: str | None = Field(default=None, max_length=50)
+    phone: str | None = Field(default=None, max_length=20)
+    gender: str | None = Field(default=None, max_length=20)
+    date_of_birth: datetime.date | None = None
+    date_of_joining: datetime.date | None = None
+    salary: float | None = Field(default=None, ge=0)
+    is_confidential: bool = False
+
+
 # ------------------------------------------------------------------ chat
 class ChatRequest(BaseModel):
     """What the client sends to /chat."""
@@ -76,6 +91,24 @@ class SuperadminAttendanceRequest(BaseModel):
 class CorrectionDecisionRequest(BaseModel):
     decision: Literal["approved", "rejected"]
     note: str | None = Field(default=None, max_length=300)
+
+
+# ------------------------------------------------------------------ attendance admin (office network)
+class NetworkCheckRequest(BaseModel):
+    """Turn the office-network restriction on check-in and check-out on or off."""
+
+    enabled: bool
+
+
+class OfficeNetworkRequest(BaseModel):
+    """One office network to check in and out from, for example 203.0.113.0/24."""
+
+    label: str = Field(min_length=1, max_length=100)
+    cidr: str = Field(min_length=1, max_length=50)
+
+
+class OfficeNetworkActiveRequest(BaseModel):
+    is_active: bool
 
 
 # ------------------------------------------------------------------ leave

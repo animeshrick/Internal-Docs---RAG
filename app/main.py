@@ -36,8 +36,14 @@ Endpoints:
     GET  /leave/{id}/document-url         temporary link to a leave document
     POST /pending-actions/{id}/document   attach an uploaded document to the leave waiting for "yes"
     POST /payroll/payslips                HR only: upload a payslip PDF for an employee and month
+    POST /admin/employees                 HR only: add a new employee row (before creating their login)
     POST /register                        HR only: create a login for an existing employee
     POST /reset-password                  HR only: give an employee a new temporary password
+    GET  /superadmin/audit-log            super admin only: who was acted on, what, and when
+    GET  /admin/attendance-settings       HR only: the network check switch and the office networks
+    POST /admin/attendance-settings/network-check   HR only: turn the office-network restriction on or off
+    POST /admin/office-networks           HR only: add an office network (label + CIDR)
+    POST /admin/office-networks/{id}/active         HR only: turn one office network on or off
 
 There is no public sign-up. HR creates every login.
 """
@@ -62,7 +68,11 @@ from app.api.requests import (
     ChangePasswordRequest,
     ChatRequest,
     CorrectionDecisionRequest,
+    CreateEmployeeRequest,
     LeaveApplyRequest,
+    NetworkCheckRequest,
+    OfficeNetworkActiveRequest,
+    OfficeNetworkRequest,
     SuperadminAttendanceRequest,
     SuperadminLeaveRequest,
     LeaveDecisionRequest,
@@ -84,6 +94,7 @@ from app.api.responses import (
 from app.core.logs import setup_logging
 from app.identity import auth
 from app.hr.attendance import service as attendance_service
+from app.hr.employees import service as employees_service
 from app.hr.leave import service as leave_service
 from app.hr.leave import store as leave_store
 from app.hr.payroll import service as payroll_service
@@ -196,6 +207,14 @@ def change_password(request: ChangePasswordRequest, employee: dict = Depends(get
     """Set your own password. Afterwards every old token stops working, so log in again."""
     auth.change_password(employee["employee_id"], request.current_password, request.new_password)
     return {"message": "Password changed. Please log in again with your new password."}
+
+
+@app.post("/admin/employees")
+def create_employee(request: CreateEmployeeRequest, hr_employee: dict = Depends(require_hr)):
+    """HR only. Adds a new employee row. Call /register afterwards to give them a login."""
+    result = employees_service.create_employee(request.model_dump())
+    logger.info("Employee %s created by %s", result["emp_id"], hr_employee["emp_id"])
+    return result
 
 
 @app.post("/register", response_model=CredentialsResponse)
@@ -368,6 +387,39 @@ def superadmin_apply_leave(request: SuperadminLeaveRequest, admin: dict = Depend
 def superadmin_mark_attendance(request: SuperadminAttendanceRequest, admin: dict = Depends(require_superadmin)):
     result = superadmin_service.mark_attendance(admin, request.emp_id, request.work_date, request.check_in_time, request.check_out_time)
     logger.info("Super admin %s set attendance of %s on %s", admin["emp_id"], request.emp_id, request.work_date)
+    return result
+
+
+@app.get("/superadmin/audit-log")
+def superadmin_audit_log_endpoint(limit: int = Query(50, ge=1, le=200), admin: dict = Depends(require_superadmin)):
+    """Who the super admin acted on, what was done, and when. Newest first."""
+    return superadmin_service.list_audit_log(admin, limit)
+
+
+# ------------------------------------------------------------------ attendance admin (HR: office network)
+@app.get("/admin/attendance-settings")
+def admin_attendance_settings(hr_employee: dict = Depends(require_hr)):
+    return attendance_service.get_admin_settings(hr_employee)
+
+
+@app.post("/admin/attendance-settings/network-check")
+def admin_set_network_check(request: NetworkCheckRequest, hr_employee: dict = Depends(require_hr)):
+    result = attendance_service.set_network_check(hr_employee, request.enabled)
+    logger.info("Network check set to %s by %s", request.enabled, hr_employee["emp_id"])
+    return result
+
+
+@app.post("/admin/office-networks")
+def admin_add_office_network(request: OfficeNetworkRequest, hr_employee: dict = Depends(require_hr)):
+    result = attendance_service.add_office_network(hr_employee, request.label, request.cidr)
+    logger.info("Office network %s (%s) added by %s", result["label"], result["cidr"], hr_employee["emp_id"])
+    return result
+
+
+@app.post("/admin/office-networks/{network_id}/active")
+def admin_set_office_network_active(network_id: int, request: OfficeNetworkActiveRequest, hr_employee: dict = Depends(require_hr)):
+    result = attendance_service.set_office_network_active(hr_employee, network_id, request.is_active)
+    logger.info("Office network %s set active=%s by %s", network_id, request.is_active, hr_employee["emp_id"])
     return result
 
 

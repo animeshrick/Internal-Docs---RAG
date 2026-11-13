@@ -4,13 +4,21 @@ hr/superadmin/service.py - what the super admin can do for other people.
     - Apply leave for anyone. It is approved at once, on any past date, and still follows the balance rules.
     - Set the check-in and check-out times of anyone on any past day.
 Weekends and company holidays are a barrier for both: nothing can be saved on those days.
+
+Every change made here for someone else is also written to the audit log (sql/13_superadmin_audit.sql),
+so there is always a record of who did what, for whom, and when - see list_audit_log below.
 """
+import logging
+
 from app.hr.attendance import service as attendance_service
 from app.hr.attendance import store as attendance_store
 from app.hr.attendance.service import AttendanceError
 from app.hr.leave import service as leave_service
 from app.hr.leave import store as leave_store
 from app.hr.leave.service import LeaveError
+from app.hr.superadmin import store as superadmin_store
+
+logger = logging.getLogger(__name__)
 
 SUPERADMIN_NOTE = "Applied by super admin"
 
@@ -60,6 +68,19 @@ def get_leave_balances(admin, emp_id_text, on_date):
     return leave_store.get_leave_balances(person["id"], on_date)
 
 
+def record_audit_entry(admin, person, action, details):
+    """Write one audit row. Best-effort, like the chat history save: a logging problem here
+    must never stop the leave or attendance change that already succeeded."""
+    try:
+        superadmin_store.insert_audit_entry({
+            "actor_id": admin["employee_id"], "actor_emp_id": admin["emp_id"],
+            "target_id": person["id"], "target_emp_id": person["emp_id"],
+            "action": action, "details": details,
+        })
+    except Exception:
+        logger.exception("Could not save the super admin audit entry for %s on %s", action, person["emp_id"])
+
+
 def apply_leave(admin, emp_id_text, leave_type_code, start_date, end_date, day_type, reason):
     """Apply and approve leave for one person. Past dates are allowed, and a supporting document is not needed."""
     require_superadmin(admin)
@@ -83,6 +104,10 @@ def apply_leave(admin, emp_id_text, leave_type_code, start_date, end_date, day_t
         })
     except leave_store.LeaveOverlapError:
         raise LeaveError("That person already has a leave on these dates.", 409)
+    record_audit_entry(admin, person, "leave_applied", {
+        "leave_id": saved_row["id"], "leave_type": details["leave_type"], "start_date": str(details["start_date"]),
+        "end_date": str(details["end_date"]), "days": details["days"], "reason": reason,
+    })
     return {"leave_id": saved_row["id"], "message": f"{details['leave_type_name']} for {person['full_name']} "
             f"({leave_service.format_days(details['days'])} days) was saved and approved."}
 
@@ -106,5 +131,15 @@ def mark_attendance(admin, emp_id_text, work_date, check_in_text, check_out_text
     in_moment = attendance_service.make_moment(work_date, requested_in) if requested_in else None
     out_moment = attendance_service.make_moment(work_date, requested_out) if requested_out else None
     saved = attendance_service.write_day(person["id"], work_date.isoformat(), in_moment, out_moment, "superadmin", attendance_service.read_settings())
+    record_audit_entry(admin, person, "attendance_set", {
+        "work_date": work_date.isoformat(), "check_in_time": check_in_text, "check_out_time": check_out_text,
+        "status": saved["status"], "is_late": saved["is_late"], "is_early_leave": saved["is_early_leave"],
+    })
     return {"message": f"Attendance of {person['full_name']} on {work_date.isoformat()} was saved.", "status": saved["status"],
             "is_late": saved["is_late"], "is_early_leave": saved["is_early_leave"], "worked_minutes": saved["worked_minutes"]}
+
+
+def list_audit_log(admin, limit=50):
+    """Recent super admin actions, newest first - who did what, for whom, and when."""
+    require_superadmin(admin)
+    return superadmin_store.list_audit_entries(limit)

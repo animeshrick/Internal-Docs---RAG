@@ -58,7 +58,8 @@ class FakeAttendanceDatabase:
 
     def install(self, monkeypatch):
         monkeypatch.setattr(attendance_service, "get_now", lambda: self.now)
-        for name in ("get_settings list_active_office_networks list_people get_person list_holidays list_approved_leaves "
+        for name in ("get_settings update_settings list_active_office_networks list_all_office_networks insert_office_network "
+                     "update_office_network list_people get_person list_holidays list_approved_leaves "
                      "get_attendance list_attendance insert_attendance update_attendance insert_correction get_correction "
                      "list_corrections update_correction").split():
             monkeypatch.setattr(attendance_store, name, getattr(self, name))
@@ -74,8 +75,27 @@ class FakeAttendanceDatabase:
     def get_settings(self):
         return dict(self.settings)
 
+    def update_settings(self, fields):
+        self.settings.update(fields)
+        return dict(self.settings)
+
     def list_active_office_networks(self):
-        return list(self.networks)
+        return [{"id": n["id"], "label": n["label"], "cidr": n["cidr"]} for n in self.networks if n.get("is_active", True)]
+
+    def list_all_office_networks(self):
+        return [dict(n) for n in self.networks]
+
+    def insert_office_network(self, fields):
+        network = {"id": self.new_id(), "is_active": True, **fields}
+        self.networks.append(network)
+        return dict(network)
+
+    def update_office_network(self, network_id, fields):
+        network = next((n for n in self.networks if n["id"] == network_id), None)
+        if network is None:
+            return None
+        network.update(fields)
+        return dict(network)
 
     def list_people(self):
         return [row_of(person_id) for person_id in PEOPLE]

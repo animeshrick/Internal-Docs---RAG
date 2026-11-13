@@ -41,8 +41,34 @@ def get_settings():
     return rows[0]
 
 
+def update_settings(fields):
+    """Change one or more settings (for example network_check_enabled). Always row id = 1."""
+    response = requests.patch(get_table_url(SETTINGS_TABLE_NAME), headers=build_headers({"Prefer": "return=representation"}),
+                              params={"id": "eq.1"}, json=dict(fields, updated_at=datetime.now(timezone.utc).isoformat()),
+                              timeout=REQUEST_TIMEOUT_SECONDS)
+    check_response(response, "Updating the attendance settings")
+    return response.json()[0]
+
+
 def list_active_office_networks():
     return read_rows(OFFICE_NETWORKS_TABLE_NAME, {"select": "id,label,cidr", "is_active": "eq.true"}, "Reading the office networks")
+
+
+def list_all_office_networks():
+    """Every office network, active or not, for the admin page that manages them."""
+    return read_rows(OFFICE_NETWORKS_TABLE_NAME, {"select": "id,label,cidr,is_active", "order": "id.asc"}, "Reading the office networks")
+
+
+def insert_office_network(fields):
+    return insert_row(OFFICE_NETWORKS_TABLE_NAME, fields, "Saving the office network")
+
+
+def update_office_network(network_id, fields):
+    response = requests.patch(get_table_url(OFFICE_NETWORKS_TABLE_NAME), headers=build_headers({"Prefer": "return=representation"}),
+                              params={"id": f"eq.{network_id}"}, json=fields, timeout=REQUEST_TIMEOUT_SECONDS)
+    check_response(response, "Updating the office network")
+    rows = response.json()
+    return rows[0] if rows else None
 
 
 # ------------------------------------------------------------------ people (with their login role)

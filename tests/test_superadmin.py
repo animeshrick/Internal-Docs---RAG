@@ -9,6 +9,7 @@ from app.hr.leave import service as leave_service
 from app.hr.leave import store as leave_store
 from app.hr.leave.service import LeaveError
 from app.hr.superadmin import service
+from app.hr.superadmin import store as superadmin_store
 from fakes_attendance import FakeAttendanceDatabase, login_of, row_of
 
 HR, EMPLOYEE, CEO, ADMIN = (login_of(person_id) for person_id in (1, 3, 5, 8))
@@ -37,6 +38,17 @@ def database(monkeypatch):
         saved.append(fields)
         return dict(fields, id=len(saved))
     monkeypatch.setattr(leave_store, "insert_leave_request", insert)
+
+    audit_entries = []
+    fake.audit_entries = audit_entries
+
+    def insert_audit(fields):
+        row = dict(fields, id=len(audit_entries) + 1, created_at=fake.now.isoformat())
+        audit_entries.append(row)
+        return row
+
+    monkeypatch.setattr(superadmin_store, "insert_audit_entry", insert_audit)
+    monkeypatch.setattr(superadmin_store, "list_audit_entries", lambda limit=50: list(reversed(audit_entries))[:limit])
     return fake
 
 
@@ -184,3 +196,46 @@ def test_the_longest_request_and_a_bad_end_date_are_refused(database, monkeypatc
         service.apply_leave(ADMIN, "EMP-3", "casual", date(2026, 11, 9), date(2026, 11, 12), "full", None)
     with pytest.raises(LeaveError):
         service.apply_leave(ADMIN, "EMP-3", "casual", date(2026, 11, 12), date(2026, 11, 10), "full", None)
+
+
+# ------------------------------------------------------------------ the audit trail
+def test_applying_leave_writes_an_audit_entry(database):
+    service.apply_leave(ADMIN, "EMP-3", "casual", date(2026, 11, 12), None, "full", "forgot to apply")
+    entry = database.audit_entries[0]
+    assert (entry["actor_emp_id"], entry["target_emp_id"], entry["action"]) == ("EMP-8", "EMP-3", "leave_applied")
+    assert entry["details"]["leave_type"] == "casual" and entry["details"]["reason"] == "forgot to apply"
+
+
+def test_marking_attendance_writes_an_audit_entry(database):
+    service.mark_attendance(ADMIN, "EMP-3", date(2026, 11, 10), "10:00", "19:00")
+    entry = database.audit_entries[0]
+    assert (entry["actor_emp_id"], entry["target_emp_id"], entry["action"]) == ("EMP-8", "EMP-3", "attendance_set")
+    assert entry["details"]["work_date"] == "2026-11-10" and entry["details"]["status"] == "present"
+
+
+def test_a_failed_attempt_leaves_no_audit_entry(database):
+    with pytest.raises(LeaveError):
+        service.apply_leave(ADMIN, "EMP-99", "casual", date(2026, 11, 12), None, "full", None)
+    assert database.audit_entries == []
+
+
+def test_an_audit_logging_problem_never_blocks_the_save(database, monkeypatch):
+    def broken_insert(fields):
+        raise RuntimeError("the database is unreachable")
+    monkeypatch.setattr(superadmin_store, "insert_audit_entry", broken_insert)
+    result = service.apply_leave(ADMIN, "EMP-3", "casual", date(2026, 11, 12), None, "full", None)
+    assert "approved" in result["message"]
+    assert database.saved_leaves[0]["employee_id"] == 3
+
+
+def test_only_the_super_admin_may_read_the_audit_log(database):
+    with pytest.raises(LeaveError) as error:
+        service.list_audit_log(HR)
+    assert error.value.status_code == 403
+
+
+def test_the_audit_log_is_newest_first(database):
+    service.apply_leave(ADMIN, "EMP-3", "casual", date(2026, 11, 12), None, "full", None)
+    service.mark_attendance(ADMIN, "EMP-3", date(2026, 11, 10), "10:00", "19:00")
+    log = service.list_audit_log(ADMIN)
+    assert [entry["action"] for entry in log] == ["attendance_set", "leave_applied"]
