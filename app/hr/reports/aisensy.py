@@ -3,9 +3,9 @@ hr/reports/aisensy.py - sends one WhatsApp message through AiSensy's campaign AP
 
 WhatsApp (through Meta) only allows a business to message someone it hasn't heard back from in the
 last 24 hours using an approved message TEMPLATE - a plain free-text message would simply be
-refused. The approved template here has exactly 7 body variables ({{1}} through {{7}}) - report
-date, number tracked, number present, late names, absent names, on-leave names, WFH names, in that
-order (see app/hr/reports/service.py's build_daily_report_fields and areas/hrms-whatsapp-report.md).
+refused. The approved template here has exactly ONE body variable, {{1}} - the whole report text
+goes in there as a single block (see app/hr/reports/service.py's build_daily_report_text and
+areas/hrms-whatsapp-report.md).
 
 Three settings, read from the environment (see app/core/config.py):
     AISENSY_API_KEY        - from the AiSensy dashboard
@@ -39,8 +39,9 @@ def is_configured():
 
 def send_report(destination_number, template_params):
     """destination_number: a WhatsApp number with a country code (a leading "+" is fine; AiSensy
-    wants digits only, so it is stripped here). template_params: the 7 values for the template's
-    {{1}} through {{7}}, in order - see build_daily_report_fields()."""
+    wants digits only, so it is stripped here). template_params: the value(s) for the template's
+    body variable(s), in order - for this report, a single-item list holding the whole report text
+    (see build_daily_report_text())."""
     if not is_configured():
         raise AiSensyError(NOT_CONFIGURED_MESSAGE)
     payload = {

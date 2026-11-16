@@ -126,6 +126,7 @@ from app.api.responses import (
     ProfileResponse,
 )
 from app.core import downtime
+from app.core import presence
 from app.core.logs import setup_logging
 from app.identity import auth
 from app.hr.attendance import service as attendance_service
@@ -228,7 +229,9 @@ def get_current_employee(credentials: HTTPAuthorizationCredentials = Depends(bea
     """Any valid login token. Used by /change-password."""
     if credentials is None:
         raise AuthError(401, "Please log in first.")
-    return auth.load_employee_from_token(credentials.credentials)
+    employee = auth.load_employee_from_token(credentials.credentials)
+    presence.mark_active(employee["employee_id"])     # the green "online" dot in Messages reads this
+    return employee
 
 
 def get_ready_employee(employee: dict = Depends(get_current_employee)):

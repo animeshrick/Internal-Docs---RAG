@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import main
+from app.core import presence
 from app.files import storage as storage_store
 from app.hr.messages import service as messages_service
 from app.hr.messages import store as messages_store
@@ -103,6 +104,29 @@ def test_list_people_excludes_myself(database):
 def test_list_people_includes_the_super_admin(database):
     result = messages_service.list_people(viewer_of(PEOPLE[0]))
     assert any(person["emp_id"] == "EMP008" for person in result)   # open messaging: anyone, including the super admin
+
+
+# ------------------------------------------------------------------ the online dot (app/core/presence.py)
+def test_list_people_marks_who_is_currently_online(database):
+    presence._reset_for_tests()
+    presence.mark_active(2)   # Bob is online; Sue is not
+    result = {person["emp_id"]: person["is_online"] for person in messages_service.list_people(viewer_of(PEOPLE[0]))}
+    assert result == {"EMP002": True, "EMP008": False}
+
+
+def test_conversation_person_is_marked_online_too(database):
+    presence._reset_for_tests()
+    presence.mark_active(2)
+    database.seed(1, 2, body="hi")
+    result = messages_service.list_conversations(viewer_of(PEOPLE[0]))
+    assert result[0]["person"]["is_online"] is True
+
+
+def test_thread_person_is_marked_online_too(database):
+    presence._reset_for_tests()
+    presence.mark_active(2)
+    result = messages_service.get_thread(viewer_of(PEOPLE[0]), "EMP002")
+    assert result["person"]["is_online"] is True
 
 
 # ------------------------------------------------------------------ list_conversations / unread_total
@@ -278,6 +302,16 @@ def test_people_endpoint(api):
     response = client.get("/messages/people", headers=HEADERS)
     assert response.status_code == 200
     assert {person["emp_id"] for person in response.json()} == {"EMP002", "EMP008"}
+
+
+def test_any_authenticated_request_marks_the_caller_online(api):
+    # Ann (EMP001, the "api" fixture's logged-in employee) calling ANY endpoint should mark her
+    # online - get_current_employee() in app/main.py does this for every authenticated request,
+    # not just the messages ones, so a plain GET /messages/people from her is enough to prove it.
+    presence._reset_for_tests()
+    assert presence.is_online(PEOPLE[0]["id"]) is False
+    client.get("/messages/people", headers=HEADERS)
+    assert presence.is_online(PEOPLE[0]["id"]) is True
 
 
 def test_conversations_endpoint(api, database):

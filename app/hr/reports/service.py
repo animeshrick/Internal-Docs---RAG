@@ -103,17 +103,18 @@ def day_off_note(for_date):
     return None
 
 
-# The AiSensy template has 7 separate body variables ({{1}} through {{7}}), in this exact order -
-# NOT one combined block of text. Each value must be a single line (WhatsApp templates don't
-# render embedded newlines well), and an empty list becomes the word "None" rather than being left
-# blank, since AiSensy/WhatsApp refuses an empty template variable.
-REPORT_FIELD_NAMES = ("report_date", "number_tracked", "number_present", "late_names", "absent_names", "on_leave", "work_from_home")
+def build_daily_report_text(for_date=None):
+    """The report text for one day: how many are present/late/absent, who is on leave or WFH, and
+    everyone's check-in time. One body variable (the whole thing is {{1}} in the AiSensy template -
+    see areas/hrms-whatsapp-report.md), so the length depends on headcount - fine for a small
+    company, but a very large one may need to raise AiSensy's template length limit or split this
+    into more than one message.
 
-
-def build_daily_report_fields(for_date=None):
-    """The report as 7 separate single-line values, in the order the AiSensy template expects
-    them (REPORT_FIELD_NAMES / see areas/hrms-whatsapp-report.md): report date, number tracked,
-    number present, late names, not-checked-in/absent names, on-leave names, and WFH names."""
+    Check-in times cover only people who can actually check in (HR/PM/employee/sales/finance - the
+    same "tracked" group as the rest of the report). The CEO, the confidential CTO, and the super
+    admin have no attendance feature at all anywhere in this app (see the hierarchy note at the top
+    of app/hr/attendance/service.py) - there is no check-in time to show for them, by design, not
+    because this report leaves them out."""
     for_date = for_date or attendance_service.get_today()
     pairs = people_with_entries(for_date)
 
@@ -122,37 +123,41 @@ def build_daily_report_fields(for_date=None):
     absent = [person for person, entry in pairs if entry["status"] in ("absent", "not_checked_in")]
     on_leave = [(person, entry) for person, entry in pairs if entry["status"] == "on_leave"]
     wfh = [person for person, entry in pairs if entry["status"] == "wfh"]
+    checked_in = [(person, entry) for person, entry in pairs if entry["check_in_at"]]
 
-    report_date = leave_service.format_date(for_date)
+    lines = [f"*Daily HR Report - {leave_service.format_date(for_date)}*"]
     note = day_off_note(for_date)
     if note:
-        report_date = f"{report_date} ({note})"
-
-    def names_or_none(people):
-        return ", ".join(person["full_name"] for person in people) or "None"
-
-    on_leave_text = ", ".join(f"{person['full_name']} ({entry['note']})" for person, entry in on_leave) or "None"
-
-    return [
-        report_date,
-        str(len(pairs)),
-        str(len(present)),
-        names_or_none(late),
-        names_or_none(absent),
-        on_leave_text,
-        names_or_none(wfh),
-    ]
+        lines.append(note)
+    lines.append("")
+    lines.append(f"Attendance ({len(pairs)} tracked)")
+    lines.append(f"Present: {len(present)}")
+    lines.append("Late: " + (", ".join(person["full_name"] for person in late) if late else "none"))
+    lines.append("Not checked in / absent: " + (", ".join(person["full_name"] for person in absent) if absent else "none"))
+    lines.append("")
+    lines.append(f"On leave today ({len(on_leave)})")
+    lines.extend([f"- {person['full_name']} - {entry['note']}" for person, entry in on_leave] or ["- Nobody"])
+    lines.append("")
+    lines.append(f"Work From Home today ({len(wfh)})")
+    lines.extend([f"- {person['full_name']}" for person in wfh] or ["- Nobody"])
+    lines.append("")
+    lines.append(f"Check-in times ({len(checked_in)})")
+    lines.extend([f"- {person['full_name']} - {attendance_service.format_clock(entry['check_in_at'])}"
+                  for person, entry in checked_in] or ["- Nobody has checked in yet"])
+    # No closing "This is an automated report..." line here - that is the AiSensy template's own
+    # static Footer field, outside {{1}}. Adding it here too would print it twice on every message.
+    return "\n".join(lines)
 
 
 # ------------------------------------------------------------------ sending
 def send_daily_report(for_date=None):
     """Build today's report and send it to every configured number. One number's failure (for
     example AiSensy refusing it) never stops the others. Returns one result per number."""
-    report_fields = build_daily_report_fields(for_date)
+    report_text = build_daily_report_text(for_date)
     results = []
     for entry in reports_store.list_numbers():
         try:
-            aisensy.send_report(entry["phone_number"], report_fields)
+            aisensy.send_report(entry["phone_number"], [report_text])
             results.append({"label": entry["label"], "phone_number": entry["phone_number"], "ok": True, "error": None})
         except aisensy.AiSensyError as error:
             logger.error("WhatsApp HR report to %s (%s) failed: %s", entry["label"], entry["phone_number"], error)

@@ -9,6 +9,7 @@ conversation; it never hides or deletes anything either.
 """
 from datetime import timedelta
 
+from app.core import presence
 from app.hr.messages import store as messages_store
 from app.hr.people import store as people_store
 from app.identity.auth import AuthError, get_current_time, parse_timestamp
@@ -33,7 +34,8 @@ def _find_person_by_emp_id(emp_id):
 
 
 def _summary(row):
-    return {"emp_id": row["emp_id"], "full_name": row["full_name"], "dept": row.get("dept"), "role": row.get("role")}
+    return {"emp_id": row["emp_id"], "full_name": row["full_name"], "dept": row.get("dept"), "role": row.get("role"),
+            "is_online": presence.is_online(row["id"])}
 
 
 def list_people(viewer):
@@ -65,7 +67,7 @@ def list_conversations(viewer):
         if conversation is None:
             partner = people.get(partner_id)
             conversation = {
-                "person": _summary(partner) if partner else {"emp_id": None, "full_name": "(former employee)", "dept": None, "role": None},
+                "person": _summary(partner) if partner else {"emp_id": None, "full_name": "(former employee)", "dept": None, "role": None, "is_online": False},
                 "last_message": _preview(row),
                 "last_message_at": row["created_at"],
                 "unread_count": 0,
