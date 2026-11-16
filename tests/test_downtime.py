@@ -25,6 +25,8 @@ from app.hr.reports import store as reports_store
     ("/superadmin/whatsapp-numbers", "superadmin"),
     ("/chat", "chat"),
     ("/chat/history", "chat"),
+    ("/messages/conversations", "messages"),
+    ("/messages/thread/EMP003", "messages"),
     ("/me", "me"),
     ("/me/profile", "me"),
 ])
@@ -89,7 +91,7 @@ def test_a_different_page_is_unaffected(api, monkeypatch):
 
 
 def test_health_is_never_blocked(monkeypatch):
-    monkeypatch.setenv("DOWNTIME_PAGES", "home,chat,documents,leave_and_wfh,payslips,approvals,attendance,me,admin,superadmin")
+    monkeypatch.setenv("DOWNTIME_PAGES", "home,chat,documents,leave_and_wfh,payslips,approvals,attendance,me,admin,superadmin,messages")
     assert client.get("/health").status_code == 200
 
 

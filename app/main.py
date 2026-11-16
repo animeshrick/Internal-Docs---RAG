@@ -61,6 +61,11 @@ Endpoints:
     POST /documents/requests/{id}/decision   the owner approves or denies a request (10 days, view-only)
     GET  /documents/{id}/download-url     temporary link to the file itself (owner, or active approved access)
     DELETE /documents/{id}                owner only: delete the document and its stored file
+    GET  /messages/people                 everyone I may message (open: anyone, including HR/CEO/super admin)
+    GET  /messages/conversations          my conversations from the last 24 hours, newest first, with unread counts
+    GET  /messages/thread/{emp_id}         my messages with one person from the last 24 hours (marks it read)
+    POST /messages/send                   send a message (text and/or an attachment) to one person
+    POST /messages/attachments            upload a PDF / PNG / JPG to attach to a message (raw file in the body)
 
 There is no public sign-up. HR creates every login.
 """
@@ -80,7 +85,14 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.api.limits import ALLOWED_DOCUMENT_TYPES, ALLOWED_SHARED_DOCUMENT_TYPES, MAXIMUM_DOCUMENT_BYTES, MAXIMUM_SHARED_DOCUMENT_BYTES
+from app.api.limits import (
+    ALLOWED_DOCUMENT_TYPES,
+    ALLOWED_MESSAGE_ATTACHMENT_TYPES,
+    ALLOWED_SHARED_DOCUMENT_TYPES,
+    MAXIMUM_DOCUMENT_BYTES,
+    MAXIMUM_MESSAGE_ATTACHMENT_BYTES,
+    MAXIMUM_SHARED_DOCUMENT_BYTES,
+)
 from app.api.requests import (
     AttachDocumentRequest,
     AttendanceCorrectionRequest,
@@ -99,6 +111,7 @@ from app.api.requests import (
     LoginRequest,
     RegisterRequest,
     ResetPasswordRequest,
+    SendMessageRequest,
     WhatsAppNumberRequest,
 )
 from app.api.responses import (
@@ -121,6 +134,7 @@ from app.hr.documents import store as documents_store
 from app.hr.employees import service as employees_service
 from app.hr.leave import service as leave_service
 from app.hr.leave import store as leave_store
+from app.hr.messages import service as messages_service
 from app.hr.payroll import service as payroll_service
 from app.hr.payroll import store as payroll_store
 from app.hr.reports import service as reports_service
@@ -759,3 +773,77 @@ async def delete_shared_document(document_id: int, employee: dict = Depends(get_
     await run_in_threadpool(documents_store.delete_document, document_id)
     logger.info("Shared document %s deleted by %s", document_id, employee["emp_id"])
     return {"message": "Document deleted."}
+
+
+# ------------------------------------------------------------------ 1-to-1 messages (open: anyone may message anyone)
+@app.get("/messages/people")
+def messages_people(employee: dict = Depends(get_ready_employee)):
+    """Everyone I may start a conversation with. Nothing to approve - any employee may message any
+    other employee, including HR, the CEO and the super admin."""
+    return messages_service.list_people(employee)
+
+
+@app.get("/messages/conversations")
+def messages_conversations(employee: dict = Depends(get_ready_employee)):
+    """My conversations with at least one message in the last 24 hours, newest first, each with
+    an unread count. Older conversations are not deleted - they simply age out of this list."""
+    return messages_service.list_conversations(employee)
+
+
+@app.get("/messages/thread/{other_emp_id}")
+def messages_thread(other_emp_id: str, employee: dict = Depends(get_ready_employee)):
+    """My messages with one person from the last 24 hours, oldest first. Opening the thread marks
+    it read, which is what clears that conversation's unread badge."""
+    return messages_service.get_thread(employee, other_emp_id)
+
+
+@app.post("/messages/send")
+def messages_send(request: SendMessageRequest, employee: dict = Depends(get_ready_employee)):
+    attachment = None
+    if request.attachment_path:
+        attachment = {
+            "path": request.attachment_path,
+            "filename": request.attachment_filename or request.attachment_path.rsplit("/", 1)[-1],
+            "content_type": request.attachment_content_type or "application/octet-stream",
+        }
+    saved = messages_service.send_message(employee, request.to_emp_id, request.body, attachment)
+    return saved
+
+
+# async because the file arrives in the request body; the blocking upload runs in a worker thread.
+@app.post("/messages/attachments")
+async def upload_message_attachment(request: Request, filename: str = Query(min_length=1, max_length=120),
+                                    employee: dict = Depends(get_ready_employee)):
+    """Send the raw file as the body, with Content-Type application/pdf, image/png or image/jpeg.
+    Returns the path to pass as attachment_path on POST /messages/send - the file is not attached
+    to any message, and nobody else can read it, until that call is made."""
+    content_type = (request.headers.get("content-type") or "").split(";")[0].strip().lower()
+    if content_type not in ALLOWED_MESSAGE_ATTACHMENT_TYPES:
+        raise AuthError(415, "Only PDF, PNG or JPG files can be attached.")
+    declared_size = request.headers.get("content-length", "")
+    if declared_size.isdigit() and int(declared_size) > MAXIMUM_MESSAGE_ATTACHMENT_BYTES:
+        raise AuthError(413, "The file is too large. The limit is 5 MB.")
+
+    file_bytes = await request.body()
+    if not file_bytes:
+        raise AuthError(400, "The file is empty.")
+    if len(file_bytes) > MAXIMUM_MESSAGE_ATTACHMENT_BYTES:
+        raise AuthError(413, "The file is too large. The limit is 5 MB.")
+
+    safe_name = make_safe_filename(filename)
+    attachment_path = f"{employee['employee_id']}/{uuid.uuid4().hex}-{safe_name}"
+    try:
+        await run_in_threadpool(storage_store.upload_file, storage_store.DIRECT_MESSAGE_ATTACHMENTS_BUCKET, attachment_path, file_bytes, content_type)
+    except Exception:
+        logger.exception("Message attachment upload failed")
+        raise HTTPException(status_code=502, detail="The file could not be saved right now. Please try again.")
+    return {"attachment_path": attachment_path, "attachment_filename": filename, "attachment_content_type": content_type}
+
+
+@app.get("/messages/attachments/{message_id}/download-url")
+def message_attachment_download_url(message_id: int, employee: dict = Depends(get_ready_employee)):
+    """A temporary link to one message's attachment. Works for the sender or the recipient, as
+    long as the message is still within the 24-hour visibility window."""
+    attachment_path = messages_service.check_can_read_attachment(employee, message_id)
+    return {"url": storage_store.create_signed_link(storage_store.DIRECT_MESSAGE_ATTACHMENTS_BUCKET, attachment_path),
+            "valid_for_seconds": storage_store.SIGNED_LINK_SECONDS}

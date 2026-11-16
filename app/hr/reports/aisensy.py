@@ -3,8 +3,9 @@ hr/reports/aisensy.py - sends one WhatsApp message through AiSensy's campaign AP
 
 WhatsApp (through Meta) only allows a business to message someone it hasn't heard back from in the
 last 24 hours using an approved message TEMPLATE - a plain free-text message would simply be
-refused. So this expects an AiSensy campaign built on a template with ONE body variable that holds
-the whole report text (see areas/hrms-whatsapp-report.md for how to set that template up).
+refused. The approved template here has exactly 7 body variables ({{1}} through {{7}}) - report
+date, number tracked, number present, late names, absent names, on-leave names, WFH names, in that
+order (see app/hr/reports/service.py's build_daily_report_fields and areas/hrms-whatsapp-report.md).
 
 Three settings, read from the environment (see app/core/config.py):
     AISENSY_API_KEY        - from the AiSensy dashboard
@@ -12,7 +13,7 @@ Three settings, read from the environment (see app/core/config.py):
     AISENSY_SENDER_NAME    - optional; the "userName" AiSensy shows as the sender (default below)
 
 None of these exist yet (the super admin's AiSensy account isn't set up) - until they are added to
-the .env file (locally) or the Render environment (in production), send_text_report() raises
+the .env file (locally) or the Render environment (in production), send_report() raises
 AiSensyError immediately with that exact explanation. Nothing is silently skipped or retried.
 """
 import requests
@@ -36,9 +37,10 @@ def is_configured():
     return bool(get_setting("AISENSY_API_KEY") and get_setting("AISENSY_CAMPAIGN_NAME"))
 
 
-def send_text_report(destination_number, report_text):
+def send_report(destination_number, template_params):
     """destination_number: a WhatsApp number with a country code (a leading "+" is fine; AiSensy
-    wants digits only, so it is stripped here). report_text becomes the template's one body variable."""
+    wants digits only, so it is stripped here). template_params: the 7 values for the template's
+    {{1}} through {{7}}, in order - see build_daily_report_fields()."""
     if not is_configured():
         raise AiSensyError(NOT_CONFIGURED_MESSAGE)
     payload = {
@@ -46,7 +48,7 @@ def send_text_report(destination_number, report_text):
         "campaignName": get_setting("AISENSY_CAMPAIGN_NAME"),
         "destination": destination_number.lstrip("+"),
         "userName": get_setting("AISENSY_SENDER_NAME", DEFAULT_SENDER_NAME),
-        "templateParams": [report_text],
+        "templateParams": template_params,
     }
     try:
         response = requests.post(AISENSY_URL, json=payload, timeout=REQUEST_TIMEOUT_SECONDS)

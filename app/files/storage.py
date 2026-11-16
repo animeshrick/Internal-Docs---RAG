@@ -13,6 +13,7 @@ from app.core.supabase import build_headers, check_response, REQUEST_TIMEOUT_SEC
 
 LEAVE_DOCUMENTS_BUCKET = "leave-documents"
 SHARED_DOCUMENTS_BUCKET = "shared-documents"
+DIRECT_MESSAGE_ATTACHMENTS_BUCKET = "direct-message-attachments"
 SIGNED_LINK_SECONDS = 300
 
 

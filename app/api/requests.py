@@ -13,7 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from app.api.limits import MAXIMUM_PASSWORD_INPUT_LENGTH, MAXIMUM_QUESTION_LENGTH
+from app.api.limits import MAXIMUM_MESSAGE_BODY_LENGTH, MAXIMUM_PASSWORD_INPUT_LENGTH, MAXIMUM_QUESTION_LENGTH
 
 
 # ------------------------------------------------------------------ logins
@@ -140,3 +140,14 @@ class AttachDocumentRequest(BaseModel):
 # ------------------------------------------------------------------ shared documents
 class DocumentAccessDecisionRequest(BaseModel):
     decision: Literal["approved", "denied"]
+
+
+# ------------------------------------------------------------------ 1-to-1 messages
+class SendMessageRequest(BaseModel):
+    """A message to one other person. "attachment_path" (if any) comes from POST /messages/attachments."""
+
+    to_emp_id: str = Field(min_length=1, max_length=50)
+    body: str | None = Field(default=None, max_length=MAXIMUM_MESSAGE_BODY_LENGTH)
+    attachment_path: str | None = Field(default=None, max_length=300)
+    attachment_filename: str | None = Field(default=None, max_length=120)
+    attachment_content_type: str | None = Field(default=None, max_length=100)

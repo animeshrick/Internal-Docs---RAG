@@ -98,8 +98,8 @@ def test_at_most_ten_numbers(numbers_db):
         reports_service.add_number(SUPERADMIN, "One too many", "+919999999999")
 
 
-# ------------------------------------------------------------------ the report text
-def test_build_daily_report_text_groups_people_by_status(database):
+# ------------------------------------------------------------------ the report fields
+def test_build_daily_report_fields_groups_people_by_status(database):
     # Ann Employee (3): present, on time. Hana HR (1): present, but late. Sal Sales (4): nothing
     # saved and not on leave, so "not checked in". Harry HR (7): on casual leave. Pam PM (2): WFH.
     # Cleo CEO (5), Tia CTO (6, confidential) and Sue Super (8, the super admin) have no attendance
@@ -118,27 +118,30 @@ def test_build_daily_report_text_groups_people_by_status(database):
     database.leaves.append({"employee_id": 7, "leave_type": "casual", "start_date": "2026-11-12", "end_date": "2026-11-12", "day_type": "full"})
     database.leaves.append({"employee_id": 2, "leave_type": "wfh", "start_date": "2026-11-12", "end_date": "2026-11-12", "day_type": "full"})
 
-    text = reports_service.build_daily_report_text(date(2026, 11, 12))
-    assert "Daily HR Report - Thu, 12 Nov 2026" in text
-    assert "Attendance (5 tracked)" in text        # Hana, Pam, Ann, Sal, Harry - not the CEO/CTO/super admin
-    assert "Present: 2" in text
-    assert "Late: Hana HR" in text
-    assert "Not checked in / absent: Sal Sales" in text
-    assert "On leave today (1)" in text
-    assert "- Harry HR - Casual Leave (full day)" in text
-    assert "Work From Home today (1)" in text
-    assert "- Pam PM" in text
+    fields = reports_service.build_daily_report_fields(date(2026, 11, 12))
+    assert fields == [
+        "Thu, 12 Nov 2026",
+        "5",     # Hana, Pam, Ann, Sal, Harry - not the CEO/CTO/super admin
+        "2",     # Ann and Hana present
+        "Hana HR",
+        "Sal Sales",
+        "Harry HR (Casual Leave (full day))",
+        "Pam PM",
+    ]
 
 
-def test_build_daily_report_text_with_nobody_on_leave_or_wfh(database):
-    text = reports_service.build_daily_report_text(date(2026, 11, 12))
-    assert "On leave today (0)" in text and "- Nobody" in text
-    assert "Work From Home today (0)" in text
+def test_build_daily_report_fields_with_nobody_on_leave_or_wfh(database):
+    # Nobody checked in and nobody is on leave/WFH this day, so everyone tracked is "not checked in".
+    fields = reports_service.build_daily_report_fields(date(2026, 11, 12))
+    assert fields[3] == "None"     # late
+    assert fields[4] != "None"     # absent - everyone, since nobody checked in
+    assert fields[5] == "None"     # on leave
+    assert fields[6] == "None"     # WFH
 
 
-def test_the_report_notes_a_weekend_or_a_company_holiday(database):
-    assert "Today is a weekend." in reports_service.build_daily_report_text(date(2026, 11, 14))     # a Saturday
-    assert "Today is a company holiday (Christmas)." in reports_service.build_daily_report_text(date(2026, 12, 25))
+def test_the_report_date_notes_a_weekend_or_a_company_holiday(database):
+    assert reports_service.build_daily_report_fields(date(2026, 11, 14))[0] == "Sat, 14 Nov 2026 (Today is a weekend.)"
+    assert reports_service.build_daily_report_fields(date(2026, 12, 25))[0] == "Fri, 25 Dec 2026 (Today is a company holiday (Christmas).)"
 
 
 # ------------------------------------------------------------------ AiSensy
@@ -147,7 +150,7 @@ def test_sending_without_aisensy_configured_is_refused(monkeypatch):
     monkeypatch.delenv("AISENSY_CAMPAIGN_NAME", raising=False)
     assert aisensy.is_configured() is False
     with pytest.raises(aisensy.AiSensyError, match="not set up yet"):
-        aisensy.send_text_report("+919876543210", "hello")
+        aisensy.send_report("+919876543210", ["a", "b", "c", "d", "e", "f", "g"])
 
 
 def test_sending_posts_the_expected_payload(monkeypatch):
@@ -166,10 +169,11 @@ def test_sending_posts_the_expected_payload(monkeypatch):
         return FakeResponse()
 
     monkeypatch.setattr(aisensy.requests, "post", fake_post)
-    result = aisensy.send_text_report("+919876543210", "report text")
+    fields = ["Thu, 12 Nov 2026", "5", "2", "Hana HR", "Sal Sales", "None", "Pam PM"]
+    result = aisensy.send_report("+919876543210", fields)
     assert result == {"success": True}
     assert captured["json"] == {"apiKey": "key123", "campaignName": "daily_report", "destination": "919876543210",
-                               "userName": aisensy.DEFAULT_SENDER_NAME, "templateParams": ["report text"]}
+                               "userName": aisensy.DEFAULT_SENDER_NAME, "templateParams": fields}
 
 
 def test_sending_raises_on_a_bad_response(monkeypatch):
@@ -183,23 +187,23 @@ def test_sending_raises_on_a_bad_response(monkeypatch):
 
     monkeypatch.setattr(aisensy.requests, "post", lambda *args, **kwargs: FakeResponse())
     with pytest.raises(aisensy.AiSensyError, match="refused"):
-        aisensy.send_text_report("+919876543210", "report text")
+        aisensy.send_report("+919876543210", ["a", "b", "c", "d", "e", "f", "g"])
 
 
 def test_send_daily_report_tries_every_number_even_if_one_fails(monkeypatch, numbers_db):
     numbers_db.append({"id": 1, "label": "A", "phone_number": "+911111111111", "created_at": "x"})
     numbers_db.append({"id": 2, "label": "B", "phone_number": "+922222222222", "created_at": "x"})
-    monkeypatch.setattr(reports_service, "build_daily_report_text", lambda for_date=None: "REPORT")
+    monkeypatch.setattr(reports_service, "build_daily_report_fields", lambda for_date=None: ["REPORT"])
 
     attempted = []
 
-    def fake_send(number, text):
+    def fake_send(number, fields):
         attempted.append(number)
         if number == "+911111111111":
             raise aisensy.AiSensyError("boom")
         return {"ok": True}
 
-    monkeypatch.setattr(aisensy, "send_text_report", fake_send)
+    monkeypatch.setattr(aisensy, "send_report", fake_send)
 
     results = reports_service.send_daily_report()
     assert attempted == ["+911111111111", "+922222222222"]           # the second number is still tried
@@ -208,7 +212,7 @@ def test_send_daily_report_tries_every_number_even_if_one_fails(monkeypatch, num
 
 
 def test_send_daily_report_with_no_numbers_configured(monkeypatch, numbers_db):
-    monkeypatch.setattr(reports_service, "build_daily_report_text", lambda for_date=None: "REPORT")
+    monkeypatch.setattr(reports_service, "build_daily_report_fields", lambda for_date=None: ["REPORT"])
     assert reports_service.send_daily_report() == []
 
 

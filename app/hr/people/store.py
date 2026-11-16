@@ -42,3 +42,12 @@ def list_dates_of_active_employees():
     rows = read_rows("employee", {"select": "id,emp_id,full_name,dept,dob,doj,is_confidential,employee_auth(role)", "is_active": "eq.true",
                                   "order": "full_name.asc"}, "Reading the employees")
     return [flatten_role(row) for row in rows]
+
+
+def list_active_people():
+    """Every active employee's id, name, department and role - for the "message this person"
+    picker and for attaching names to a conversation list. No sensitive fields (no dob/doj/salary/
+    phone/address)."""
+    rows = read_rows("employee", {"select": "id,emp_id,full_name,dept,employee_auth(role)", "is_active": "eq.true",
+                                  "order": "full_name.asc"}, "Reading the employees")
+    return [flatten_role(row) for row in rows]

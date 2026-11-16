@@ -27,7 +27,7 @@ from app.core.config import get_setting
 
 PAGE_KEYS = {
     "home", "chat", "documents", "leave_and_wfh", "payslips", "approvals",
-    "attendance", "me", "admin", "superadmin",
+    "attendance", "me", "admin", "superadmin", "messages",
 }
 
 # The first matching prefix wins, so the more specific ones are listed first.
@@ -43,6 +43,7 @@ _PAGE_KEY_BY_PATH_PREFIX = [
     ("/admin", "admin"),
     ("/superadmin", "superadmin"),
     ("/chat", "chat"),
+    ("/messages", "messages"),
     ("/me", "me"),
 ]
 
