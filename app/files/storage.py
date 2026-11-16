@@ -12,6 +12,7 @@ from app.core.config import get_required_setting
 from app.core.supabase import build_headers, check_response, REQUEST_TIMEOUT_SECONDS
 
 LEAVE_DOCUMENTS_BUCKET = "leave-documents"
+SHARED_DOCUMENTS_BUCKET = "shared-documents"
 SIGNED_LINK_SECONDS = 300
 
 
@@ -40,3 +41,13 @@ def create_signed_link(bucket_name, file_path):
     )
     check_response(response, "Creating the document link")
     return get_storage_url() + response.json()["signedURL"]
+
+
+def delete_file(bucket_name, file_path):
+    """Remove one file. Used when an owner deletes their shared document."""
+    response = requests.delete(
+        f"{get_storage_url()}/object/{bucket_name}/{quote(file_path)}",
+        headers=build_headers(),
+        timeout=REQUEST_TIMEOUT_SECONDS,
+    )
+    check_response(response, "Deleting the file")

@@ -11,6 +11,7 @@ Then open http://127.0.0.1:8000/docs to try it in the browser.
 
 Endpoints:
     GET  /health                          open to everyone
+    GET  /system/downtime                 open to everyone: which pages are down for planned maintenance
     POST /login                           emp_id + password -> token
     POST /change-password                 any logged-in employee (also the first step with a temporary password)
     GET  /me                              who am I
@@ -36,14 +37,30 @@ Endpoints:
     GET  /leave/{id}/document-url         temporary link to a leave document
     POST /pending-actions/{id}/document   attach an uploaded document to the leave waiting for "yes"
     POST /payroll/payslips                HR only: upload a payslip PDF for an employee and month
+    GET  /payroll/payslips/mine/years     every year from my joining year to the current year
+    GET  /payroll/payslips/mine           January-December of one year (default: current year), whether a payslip exists for each month
+    GET  /payroll/payslips/mine/{month}/download-url   my own payslip for one month (generated the first time it's asked for)
     POST /admin/employees                 HR only: add a new employee row (before creating their login)
     POST /register                        HR only: create a login for an existing employee
     POST /reset-password                  HR only: give an employee a new temporary password
     GET  /superadmin/audit-log            super admin only: who was acted on, what, and when
+    GET  /superadmin/whatsapp-numbers     super admin only: the numbers receiving the twice-daily report
+    POST /superadmin/whatsapp-numbers     super admin only: add a number (label + phone number), max 10
+    DELETE /superadmin/whatsapp-numbers/{id}  super admin only: remove a number
+    POST /superadmin/whatsapp-report/send-now  super admin only: send today's report right now (to test AiSensy)
     GET  /admin/attendance-settings       HR only: the network check switch and the office networks
     POST /admin/attendance-settings/network-check   HR only: turn the office-network restriction on or off
     POST /admin/office-networks           HR only: add an office network (label + CIDR)
     POST /admin/office-networks/{id}/active         HR only: turn one office network on or off
+    POST /documents                       upload a shared document (raw file in the body); you become its owner
+    GET  /documents                       everyone's file names, with my own access state on each
+    GET  /documents/{id}                  one document's details (the owner also sees its request list)
+    POST /documents/{id}/request          ask the owner for read-only access to a document that is not mine
+    GET  /documents/requests/inbox        requests waiting for a decision, across documents I own
+    GET  /documents/requests/mine         what happened to every access request I made
+    POST /documents/requests/{id}/decision   the owner approves or denies a request (10 days, view-only)
+    GET  /documents/{id}/download-url     temporary link to the file itself (owner, or active approved access)
+    DELETE /documents/{id}                owner only: delete the document and its stored file
 
 There is no public sign-up. HR creates every login.
 """
@@ -53,6 +70,7 @@ import logging
 import os
 import re
 import uuid
+from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
@@ -60,8 +78,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from starlette.concurrency import run_in_threadpool
+from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.api.limits import ALLOWED_DOCUMENT_TYPES, MAXIMUM_DOCUMENT_BYTES
+from app.api.limits import ALLOWED_DOCUMENT_TYPES, ALLOWED_SHARED_DOCUMENT_TYPES, MAXIMUM_DOCUMENT_BYTES, MAXIMUM_SHARED_DOCUMENT_BYTES
 from app.api.requests import (
     AttachDocumentRequest,
     AttendanceCorrectionRequest,
@@ -69,6 +88,7 @@ from app.api.requests import (
     ChatRequest,
     CorrectionDecisionRequest,
     CreateEmployeeRequest,
+    DocumentAccessDecisionRequest,
     LeaveApplyRequest,
     NetworkCheckRequest,
     OfficeNetworkActiveRequest,
@@ -79,6 +99,7 @@ from app.api.requests import (
     LoginRequest,
     RegisterRequest,
     ResetPasswordRequest,
+    WhatsAppNumberRequest,
 )
 from app.api.responses import (
     AttendanceCorrection,
@@ -91,14 +112,19 @@ from app.api.responses import (
     LoginResponse,
     ProfileResponse,
 )
+from app.core import downtime
 from app.core.logs import setup_logging
 from app.identity import auth
 from app.hr.attendance import service as attendance_service
+from app.hr.documents import service as documents_service
+from app.hr.documents import store as documents_store
 from app.hr.employees import service as employees_service
 from app.hr.leave import service as leave_service
 from app.hr.leave import store as leave_store
 from app.hr.payroll import service as payroll_service
 from app.hr.payroll import store as payroll_store
+from app.hr.reports import service as reports_service
+from app.hr.reports import scheduler as reports_scheduler
 from app.files import storage as storage_store
 from app.rag.answer.assistant import answer_chat_message
 from app.chat import store as chat_store
@@ -108,19 +134,41 @@ from app.identity.auth import HR_LEVEL_ROLES, AuthError
 from app.hr.attendance.service import AttendanceError
 from app.hr.leave.service import LeaveError
 from app.hr.payroll.service import PayrollError
+from app.hr.reports.service import ReportError
 
 setup_logging()                      # the API is an entry point too
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="HR Policy Chatbot")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    reports_scheduler.start()
+    yield
+    reports_scheduler.stop()
+
+
+app = FastAPI(title="HR Policy Chatbot", lifespan=lifespan)
+
+
+async def _downtime_middleware(request: Request, call_next):
+    """Refuses a request for a page that DOWNTIME_PAGES currently marks down, before it reaches
+    any route. See app/core/downtime.py for the page keys and which routes belong to each."""
+    page_key = downtime.page_key_for_path(request.url.path)
+    if page_key and page_key in downtime.get_down_pages():
+        return JSONResponse(status_code=503, content={"detail": downtime.DOWNTIME_MESSAGE, "code": "page_down", "page": page_key})
+    return await call_next(request)
+
+
+app.add_middleware(BaseHTTPMiddleware, dispatch=_downtime_middleware)
 
 # The website is normally served from the same address (through a proxy), so CORS stays off by default.
 # If the website runs on its own address, list it in .env, for example:
 #   CORS_ALLOWED_ORIGINS=https://hr.example.com,http://localhost:5173
 allowed_origins = [origin.strip() for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if origin.strip()]
 if allowed_origins:
-    app.add_middleware(CORSMiddleware, allow_origins=allowed_origins, allow_methods=["GET", "POST"],
+    app.add_middleware(CORSMiddleware, allow_origins=allowed_origins, allow_methods=["GET", "POST", "DELETE"],
                        allow_headers=["Authorization", "Content-Type"], expose_headers=["Retry-After"])
+
 
 # auto_error=False so that a missing token gives our own 401 message (the default would be 403).
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -153,6 +201,12 @@ def handle_leave_error(request, error):
 def handle_attendance_error(request, error):
     """A broken attendance rule (for example "you already checked in") becomes a normal JSON error."""
     return JSONResponse(status_code=error.status_code, content={"detail": error.message, "code": "attendance_rule"})
+
+
+@app.exception_handler(ReportError)
+def handle_report_error(request, error):
+    """A broken WhatsApp-report rule (for example "already 10 numbers") becomes a normal JSON error."""
+    return JSONResponse(status_code=error.status_code, content={"detail": error.message, "code": "report_rule"})
 
 
 # ------------------------------------------------------------------ who is calling?
@@ -192,6 +246,14 @@ MESSAGES_SHOWN_TO_THE_AI = 6      # the AI reads the last 3 questions and 3 answ
 def health_check():
     """Tells a load balancer or a person that the server is running."""
     return {"status": "ok"}
+
+
+@app.get("/system/downtime")
+def system_downtime_status():
+    """Public, no login needed: which pages are down for planned maintenance right now (see
+    DOWNTIME_PAGES in app/core/downtime.py). The frontend polls this to show a maintenance
+    screen on the matching pages instead of waiting for each of their requests to fail."""
+    return {"down_pages": sorted(downtime.get_down_pages())}
 
 
 @app.post("/login", response_model=LoginResponse)
@@ -396,6 +458,35 @@ def superadmin_audit_log_endpoint(limit: int = Query(50, ge=1, le=200), admin: d
     return superadmin_service.list_audit_log(admin, limit)
 
 
+# ------------------------------------------------------------------ WhatsApp daily report (super admin)
+@app.get("/superadmin/whatsapp-numbers")
+def list_whatsapp_numbers(admin: dict = Depends(require_superadmin)):
+    """Every number that receives the twice-daily report (11am and 5pm India time), oldest first."""
+    return reports_service.list_numbers(admin)
+
+
+@app.post("/superadmin/whatsapp-numbers")
+def add_whatsapp_number(request: WhatsAppNumberRequest, admin: dict = Depends(require_superadmin)):
+    """Add one number. Up to 10 at a time; remove one first to add another."""
+    result = reports_service.add_number(admin, request.label, request.phone_number)
+    logger.info("WhatsApp report number %s added by %s", result["phone_number"], admin["emp_id"])
+    return result
+
+
+@app.delete("/superadmin/whatsapp-numbers/{number_id}")
+def remove_whatsapp_number(number_id: int, admin: dict = Depends(require_superadmin)):
+    result = reports_service.remove_number(admin, number_id)
+    logger.info("WhatsApp report number %s removed by %s", result["phone_number"], admin["emp_id"])
+    return {"message": "The number was removed."}
+
+
+@app.post("/superadmin/whatsapp-report/send-now")
+def send_whatsapp_report_now(admin: dict = Depends(require_superadmin)):
+    """Builds and sends today's report right away, to every configured number - mainly to test
+    the AiSensy setup without waiting for 11am or 5pm. One result per number."""
+    return reports_service.send_daily_report_now(admin)
+
+
 # ------------------------------------------------------------------ attendance admin (HR: office network)
 @app.get("/admin/attendance-settings")
 def admin_attendance_settings(hr_employee: dict = Depends(require_hr)):
@@ -502,7 +593,8 @@ def cancel_my_leave(leave_id: int, employee: dict = Depends(get_ready_employee))
 
 @app.get("/leave/approvals")
 def leave_approvals(employee: dict = Depends(get_ready_employee)):
-    """Leaves waiting for this person: their direct reports (or everyone, for HR)."""
+    """Leaves waiting for this person to decide. Only the super admin decides any leave, so everyone
+    else (including HR) gets an empty list here."""
     return leave_service.list_approvals(employee)
 
 
@@ -548,3 +640,122 @@ async def upload_payslip(request: Request, emp_id: str = Query(min_length=1, max
         raise HTTPException(status_code=502, detail="The payslip could not be saved right now. Please try again.")
     logger.info("Payslip %s for %s uploaded by %s", month, details["emp_id"], hr_employee["emp_id"])
     return {"emp_id": details["emp_id"], "month": month, "message": "Payslip saved."}
+
+
+@app.get("/payroll/payslips/mine/years")
+def my_payslip_years(employee: dict = Depends(get_ready_employee)):
+    """Every year from my joining year to the current year, newest first."""
+    return payroll_service.list_my_payslip_years(employee)
+
+
+@app.get("/payroll/payslips/mine")
+def my_payslip_months(year: int | None = Query(default=None, ge=2000, le=2100), employee: dict = Depends(get_ready_employee)):
+    """January-December of one year (the current year when none is given). Each month is marked with
+    whether a payslip already exists, and - if it falls before I joined or after the current month -
+    why it is disabled."""
+    return payroll_service.list_my_payslip_months(employee, year)
+
+
+@app.get("/payroll/payslips/mine/{month}/download-url")
+def my_payslip_download_url(month: str, employee: dict = Depends(get_ready_employee)):
+    """A temporary link to my own payslip for one month (format: 2026-10). Generated on first request."""
+    return payroll_service.get_or_build_payslip_link(employee, month)
+
+
+# ------------------------------------------------------------------ shared documents (everyone: upload, list, request, decide)
+def make_safe_document_filename(filename):
+    """Same rule as leave documents: letters, digits, dot, dash and underscore only."""
+    return make_safe_filename(filename)
+
+
+@app.post("/documents")
+async def upload_shared_document(request: Request, filename: str = Query(min_length=1, max_length=120),
+                                 employee: dict = Depends(get_ready_employee)):
+    """Send the raw file as the body. Anyone may upload; the uploader becomes the owner.
+    Content-Type must be one of ALLOWED_SHARED_DOCUMENT_TYPES (PDF, PNG, JPG, Word, Excel, PowerPoint)."""
+    content_type = (request.headers.get("content-type") or "").split(";")[0].strip().lower()
+    if content_type not in ALLOWED_SHARED_DOCUMENT_TYPES:
+        raise AuthError(415, "That file type is not allowed. Use PDF, Word, Excel, PowerPoint, PNG or JPG.")
+    declared_size = request.headers.get("content-length", "")
+    if declared_size.isdigit() and int(declared_size) > MAXIMUM_SHARED_DOCUMENT_BYTES:
+        raise AuthError(413, "The file is too large. The limit is 20 MB.")
+
+    file_bytes = await request.body()
+    if not file_bytes:
+        raise AuthError(400, "The file is empty.")
+    if len(file_bytes) > MAXIMUM_SHARED_DOCUMENT_BYTES:
+        raise AuthError(413, "The file is too large. The limit is 20 MB.")
+
+    safe_name = make_safe_document_filename(filename)
+    storage_path = f"{employee['employee_id']}/{uuid.uuid4().hex}-{safe_name}"
+    try:
+        await run_in_threadpool(storage_store.upload_file, storage_store.SHARED_DOCUMENTS_BUCKET, storage_path, file_bytes, content_type)
+    except Exception:
+        logger.exception("Shared document upload failed")
+        raise HTTPException(status_code=502, detail="The document could not be saved right now. Please try again.")
+
+    saved = await run_in_threadpool(documents_store.insert_document, {
+        "owner_id": employee["employee_id"], "original_filename": filename, "storage_path": storage_path,
+        "content_type": content_type, "size_bytes": len(file_bytes),
+    })
+    logger.info("Shared document %s uploaded by %s", saved["id"], employee["emp_id"])
+    return {"id": saved["id"], "original_filename": saved["original_filename"], "message": "Document uploaded."}
+
+
+@app.get("/documents")
+def list_shared_documents(employee: dict = Depends(get_ready_employee)):
+    """Everyone's file names, in one list, with my own access state on each."""
+    return documents_service.list_documents(employee)
+
+
+@app.get("/documents/requests/inbox")
+def shared_document_requests_inbox(employee: dict = Depends(get_ready_employee)):
+    """Requests waiting for a decision, across every document I own."""
+    return documents_service.list_my_pending_inbox(employee)
+
+
+@app.get("/documents/requests/mine")
+def my_shared_document_requests(employee: dict = Depends(get_ready_employee)):
+    """What happened to every access request I made."""
+    return documents_service.list_my_requests(employee)
+
+
+@app.get("/documents/{document_id}")
+def shared_document_detail(document_id: int, employee: dict = Depends(get_ready_employee)):
+    """One document's details. The owner also sees the full list of requests for it."""
+    return documents_service.get_document_detail(employee, document_id)
+
+
+@app.post("/documents/{document_id}/request")
+def request_shared_document_access(document_id: int, employee: dict = Depends(get_ready_employee)):
+    """Ask the owner for read-only access to a document that is not mine."""
+    documents_service.request_access(employee, document_id)
+    return {"message": "Your request was sent to the owner."}
+
+
+@app.post("/documents/requests/{request_id}/decision")
+def decide_shared_document_request(request_id: int, request: DocumentAccessDecisionRequest, employee: dict = Depends(get_ready_employee)):
+    """The owner approves or denies one request waiting for them."""
+    updated = documents_service.decide_request(employee, request_id, request.decision)
+    return {"id": updated["id"], "status": updated["status"], "expires_at": updated.get("expires_at")}
+
+
+@app.get("/documents/{document_id}/download-url")
+def shared_document_download_url(document_id: int, employee: dict = Depends(get_ready_employee)):
+    """A temporary link to the file itself, read-only. Works for the owner, or anyone with active approved access."""
+    storage_path = documents_service.check_can_read(employee, document_id)
+    return {"url": storage_store.create_signed_link(storage_store.SHARED_DOCUMENTS_BUCKET, storage_path),
+            "valid_for_seconds": storage_store.SIGNED_LINK_SECONDS}
+
+
+@app.delete("/documents/{document_id}")
+async def delete_shared_document(document_id: int, employee: dict = Depends(get_ready_employee)):
+    """Only the owner may delete their own document. Removes the stored file and every access request for it."""
+    document = documents_service.check_can_delete(employee, document_id)
+    try:
+        await run_in_threadpool(storage_store.delete_file, storage_store.SHARED_DOCUMENTS_BUCKET, document["storage_path"])
+    except Exception:
+        logger.exception("Could not delete the shared document's stored file (the record is still removed)")
+    await run_in_threadpool(documents_store.delete_document, document_id)
+    logger.info("Shared document %s deleted by %s", document_id, employee["emp_id"])
+    return {"message": "Document deleted."}

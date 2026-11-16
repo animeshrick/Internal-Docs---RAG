@@ -7,7 +7,7 @@ from app.hr.attendance import service
 from app.hr.attendance.service import AttendanceError
 from fakes_attendance import FakeAttendanceDatabase, india, login_of
 
-HR, PM, EMPLOYEE, SALES, CEO, CTO, OTHER_HR = (login_of(person_id) for person_id in (1, 2, 3, 4, 5, 6, 7))
+HR, PM, EMPLOYEE, SALES, CEO, CTO, OTHER_HR, SUPERADMIN = (login_of(person_id) for person_id in (1, 2, 3, 4, 5, 6, 7, 8))
 LOCAL_IP = "203.0.113.7"
 
 
@@ -105,6 +105,18 @@ def test_no_check_in_on_a_weekend_a_holiday_or_a_day_of_leave(database):
 
 def test_a_half_day_of_leave_still_allows_a_check_in(database):
     database.leaves.append({"employee_id": 3, "leave_type": "casual", "start_date": "2026-11-12", "end_date": "2026-11-12", "day_type": "half"})
+    assert service.check_in(EMPLOYEE, LOCAL_IP)["status"] == "checked_in"
+
+
+def test_no_check_in_on_a_day_of_wfh(database):
+    database.leaves.append({"employee_id": 3, "leave_type": "wfh", "start_date": "2026-11-12", "end_date": "2026-11-12", "day_type": "full"})
+    database.set_time("10:00")
+    with pytest.raises(AttendanceError, match="working from home"):
+        service.check_in(EMPLOYEE, LOCAL_IP)
+
+
+def test_a_half_day_of_wfh_still_allows_a_check_in(database):
+    database.leaves.append({"employee_id": 3, "leave_type": "wfh", "start_date": "2026-11-12", "end_date": "2026-11-12", "day_type": "half"})
     assert service.check_in(EMPLOYEE, LOCAL_IP)["status"] == "checked_in"
 
 
@@ -208,6 +220,19 @@ def test_the_month_calendar_and_summary(database):
     assert summary["worked_minutes"] == 540 + 280 + 420
 
 
+def test_wfh_shows_in_the_month_calendar_and_summary_separately_from_leave(database):
+    database.leaves.append({"employee_id": 3, "leave_type": "casual", "start_date": "2026-11-04", "end_date": "2026-11-04", "day_type": "full"})
+    database.leaves.append({"employee_id": 3, "leave_type": "wfh", "start_date": "2026-11-05", "end_date": "2026-11-05", "day_type": "full"})
+    database.set_time("10:05")
+    month = service.get_my_month(EMPLOYEE, "2026-11")
+    by_date = {day["date"]: day for day in month["days"]}
+    assert by_date["2026-11-04"]["status"] == "on_leave" and by_date["2026-11-04"]["note"] == "Casual Leave (full day)"
+    assert by_date["2026-11-05"]["status"] == "wfh" and by_date["2026-11-05"]["note"] == "Work From Home (full day)"
+    summary = month["summary"]
+    assert summary["on_leave"] == 1
+    assert summary["wfh"] == 1
+
+
 def test_a_future_or_unreadable_month_is_refused(database):
     with pytest.raises(AttendanceError, match="not started"):
         service.get_my_month(EMPLOYEE, "2026-12")
@@ -220,29 +245,33 @@ def ask(person, day="2026-11-10", check_in=None, check_out="19:00", reason="Forg
     return service.create_correction(person, date.fromisoformat(day), check_in, check_out, reason)
 
 
-def test_a_missed_check_out_is_fixed_after_the_pm_approves(database):
+def test_a_missed_check_out_is_fixed_after_the_super_admin_approves(database):
     work_day(database, "10:00", None, "2026-11-10")
     database.set_time("10:05")
     request = ask(EMPLOYEE)
     assert request["status"] == "pending" and request["full_name"] == "Ann Employee"
     assert service.get_my_month(EMPLOYEE, "2026-11")["days"][9]["status"] == "incomplete"
-    decided = service.decide_correction(PM, request["id"], "approved", "ok")
-    assert (decided["status"], decided["decision_note"], decided["decided_by"]) == ("approved", "ok", 2)
+    with pytest.raises(AttendanceError, match="Only the super admin"):
+        service.decide_correction(PM, request["id"], "approved")                 # the PM can no longer decide
+    decided = service.decide_correction(SUPERADMIN, request["id"], "approved", "ok")
+    assert (decided["status"], decided["decision_note"], decided["decided_by"]) == ("approved", "ok", 8)
     row = database.get_attendance(3, "2026-11-10")
     assert (row["status"], row["worked_minutes"], row["source"]) == ("present", 540, "correction")
 
 
 def test_a_missed_check_in_day_with_no_row_is_created(database):
     request = ask(EMPLOYEE, day="2026-11-11", check_in="10:10", check_out="19:20")
-    service.decide_correction(HR, request["id"], "approved")
+    service.decide_correction(SUPERADMIN, request["id"], "approved")
     row = database.get_attendance(3, "2026-11-11")
     assert (row["status"], row["is_late"], row["source"]) == ("present", False, "correction")
 
 
-def test_hr_can_also_decide_an_employees_request_and_reject_leaves_the_row_alone(database):
+def test_hr_can_no_longer_decide_an_employees_request(database):
     work_day(database, "10:00", None, "2026-11-10")
     request = ask(EMPLOYEE)
-    decided = service.decide_correction(HR, request["id"], "rejected", "Not true")
+    with pytest.raises(AttendanceError, match="Only the super admin"):
+        service.decide_correction(HR, request["id"], "rejected", "Not true")
+    decided = service.decide_correction(SUPERADMIN, request["id"], "rejected", "Not true")
     assert decided["status"] == "rejected"
     assert database.get_attendance(3, "2026-11-10")["check_out_at"] is None
 
@@ -252,33 +281,40 @@ def test_a_rejection_needs_a_comment(database):
     request = ask(EMPLOYEE)
     for empty_note in (None, "", "   "):
         with pytest.raises(AttendanceError, match="reason for rejecting") as error:
-            service.decide_correction(PM, request["id"], "rejected", empty_note)
+            service.decide_correction(SUPERADMIN, request["id"], "rejected", empty_note)
         assert error.value.status_code == 400
     assert database.get_correction(request["id"])["status"] == "pending"
-    assert service.decide_correction(PM, request["id"], "rejected", "No proof")["decision_note"] == "No proof"
+    assert service.decide_correction(SUPERADMIN, request["id"], "rejected", "No proof")["decision_note"] == "No proof"
 
 
-def test_the_pms_request_goes_to_hr_and_hr_requests_are_automatic(database):
+def test_the_pms_and_hrs_own_requests_also_wait_for_the_super_admin(database):
+    """HR is treated like any other employee here: its own request is never auto-approved, and
+    HR cannot decide it (or anyone else's) - only the super admin can decide any correction."""
     work_day(database, "10:00", None, "2026-11-10", employee=PM)
-    request = ask(PM)
+    pm_request = ask(PM)
     with pytest.raises(AttendanceError, match="could not find") as error:
-        service.decide_correction(PM, request["id"], "approved")                 # nobody approves their own
+        service.decide_correction(PM, pm_request["id"], "approved")              # nobody approves their own
     assert error.value.status_code == 404
     with pytest.raises(AttendanceError):
-        service.decide_correction(EMPLOYEE, request["id"], "approved")
-    assert service.decide_correction(HR, request["id"], "approved")["status"] == "approved"
+        service.decide_correction(EMPLOYEE, pm_request["id"], "approved")
+    with pytest.raises(AttendanceError, match="Only the super admin"):
+        service.decide_correction(HR, pm_request["id"], "approved")              # HR has no special power any more
+    assert service.decide_correction(SUPERADMIN, pm_request["id"], "approved")["status"] == "approved"
 
     work_day(database, "10:00", None, "2026-11-11", employee=HR)
-    automatic = ask(HR, day="2026-11-11")
-    assert (automatic["status"], automatic["decision_note"], automatic["decided_by"]) == ("approved", "Auto", 1)
+    hr_request = ask(HR, day="2026-11-11")
+    assert hr_request["status"] == "pending"                                     # not auto-approved any more
+    assert database.get_attendance(1, "2026-11-11")["status"] == "checked_in"
+    assert service.decide_correction(SUPERADMIN, hr_request["id"], "approved")["status"] == "approved"
     assert database.get_attendance(1, "2026-11-11")["status"] == "present"
 
 
 def test_hr_cannot_decide_another_hr_or_hidden_people(database):
     work_day(database, "10:00", None, "2026-11-10", employee=OTHER_HR)
-    request = ask(OTHER_HR)                                                      # automatic, so it is not even waiting
-    assert request["decision_note"] == "Auto"
+    request = ask(OTHER_HR)
+    assert request["status"] == "pending"                                        # not auto-approved any more
     assert service.list_correction_inbox(HR) == []
+    assert service.decide_correction(SUPERADMIN, request["id"], "approved")["status"] == "approved"
 
 
 def test_only_the_last_7_working_days_can_be_corrected(database):
@@ -326,19 +362,22 @@ def test_one_waiting_request_per_day_and_one_decision_each(database):
     with pytest.raises(AttendanceError, match="already have a waiting") as error:
         ask(EMPLOYEE, check_out="18:00")
     assert error.value.status_code == 409
-    service.decide_correction(PM, request["id"], "approved")
+    service.decide_correction(SUPERADMIN, request["id"], "approved")
     with pytest.raises(AttendanceError, match="already approved") as error:
-        service.decide_correction(HR, request["id"], "rejected")
+        service.decide_correction(SUPERADMIN, request["id"], "rejected")
     assert error.value.status_code == 409
 
 
-def test_the_inbox_shows_only_requests_of_the_people_below(database):
+def test_the_inbox_is_empty_for_everyone_but_the_super_admin(database):
+    """Nobody's hierarchy matters any more - the PM's and HR's inboxes are always empty,
+    and only the super admin sees every waiting request."""
     work_day(database, "10:00", None, "2026-11-10")
     work_day(database, "10:00", None, "2026-11-10", employee=PM)
     employee_request, pm_request = ask(EMPLOYEE), ask(PM)
-    assert [row["id"] for row in service.list_correction_inbox(PM)] == [employee_request["id"]]
-    assert sorted(row["id"] for row in service.list_correction_inbox(HR)) == sorted([employee_request["id"], pm_request["id"]])
-    assert service.list_correction_inbox(HR)[0]["current_check_in_at"] is not None
+    assert service.list_correction_inbox(PM) == []
+    assert service.list_correction_inbox(HR) == []
+    assert sorted(row["id"] for row in service.list_correction_inbox(SUPERADMIN)) == sorted([employee_request["id"], pm_request["id"]])
+    assert service.list_correction_inbox(SUPERADMIN)[0]["current_check_in_at"] is not None
     with pytest.raises(AttendanceError):
         service.list_correction_inbox(EMPLOYEE)
     assert [row["id"] for row in service.list_my_corrections(EMPLOYEE)] == [employee_request["id"]]
@@ -349,7 +388,7 @@ def test_a_failed_approval_puts_the_request_back(database, monkeypatch):
     request = ask(EMPLOYEE)
     monkeypatch.setattr(service, "apply_correction", lambda row, settings: (_ for _ in ()).throw(RuntimeError("database down")))
     with pytest.raises(RuntimeError):
-        service.decide_correction(PM, request["id"], "approved")
+        service.decide_correction(SUPERADMIN, request["id"], "approved")
     assert database.get_correction(request["id"])["status"] == "pending"
 
 

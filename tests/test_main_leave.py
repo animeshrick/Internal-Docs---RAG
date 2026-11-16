@@ -64,7 +64,7 @@ def test_balances_and_my_leaves(api):
 def test_apply_on_the_website(api):
     response = client.post("/leave/apply", json={"leave_type": "casual", "start_date": "2026-11-10"}, headers=HEADERS)
     assert response.status_code == 200
-    assert response.json()["approver"] == "Rahul Verma"
+    assert response.json()["approver"] == "the super admin"
     assert api.database.leave_requests[0]["status"] == "pending"
 
 
@@ -89,7 +89,7 @@ def test_maternity_needs_a_document_uploaded_on_the_website(api):
     document_path = upload.json()["document_path"]
     assert document_path.startswith("3/") and "doctor_note.pdf" in document_path       # safe file name
     response = client.post("/leave/apply", json=dict(body, document_path=document_path), headers=HEADERS)
-    assert response.status_code == 200 and response.json()["approver"] == "HR"
+    assert response.status_code == 200 and response.json()["approver"] == "the super admin"
 
 
 def test_upload_limits(api):
@@ -124,9 +124,12 @@ def test_cancel_my_leave(api):
     assert client.post(f"/leave/{other['id']}/cancel", headers=HEADERS).status_code == 404       # not theirs
 
 
-def test_the_manager_sees_and_decides_the_teams_leaves(api):
+def test_the_manager_cannot_decide_only_the_super_admin_can(api):
     leave = api.database.add_leave(3, "casual", "2026-11-10", "2026-11-10", 1, status="pending")
     api.employee = make_employee(2)                                                               # Rahul, the manager
+    assert client.get("/leave/approvals", headers=HEADERS).json() == []
+    assert client.post(f"/leave/{leave['id']}/decision", json={"decision": "approved"}, headers=HEADERS).status_code == 403
+    api.employee = make_employee(9, role="superadmin")
     approvals = client.get("/leave/approvals", headers=HEADERS).json()
     assert [item["id"] for item in approvals] == [leave["id"]]
     assert approvals[0]["full_name"] == "Ananya Das"
@@ -145,7 +148,7 @@ def test_a_colleague_cannot_decide_and_the_employee_cannot_approve_themselves(ap
 
 
 def test_a_rejection_without_a_reason_is_refused_over_the_api(api):
-    api.employee = make_employee(1, role="hr")
+    api.employee = make_employee(9, role="superadmin")
     leave = api.database.add_leave(3, "casual", "2026-11-10", "2026-11-10", 1, status="pending")
     response = client.post(f"/leave/{leave['id']}/decision", json={"decision": "rejected"}, headers=HEADERS)
     assert response.status_code == 400 and "reason for rejecting" in response.json()["detail"]
@@ -169,9 +172,11 @@ def test_decision_values_are_checked(api):
 
 def test_document_links_follow_the_same_visibility_rules(api):
     leave = api.database.add_leave(3, "sick", "2026-11-10", "2026-11-10", 1, status="pending", document_path="3/note.pdf")
-    api.employee = make_employee(2)
+    api.employee = make_employee(9, role="superadmin")
     assert client.get(f"/leave/{leave['id']}/document-url", headers=HEADERS).json()["url"].startswith("https://signed.example/3/note.pdf")
-    api.employee = make_employee(4)
+    api.employee = make_employee(2)                                       # the manager: no longer allowed
+    assert client.get(f"/leave/{leave['id']}/document-url", headers=HEADERS).status_code == 403
+    api.employee = make_employee(4)                                       # a colleague
     assert client.get(f"/leave/{leave['id']}/document-url", headers=HEADERS).status_code == 403
 
 

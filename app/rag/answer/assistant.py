@@ -37,6 +37,8 @@ CANCEL_WORDS = {"no", "n", "cancel", "nope", "no cancel", "no thanks"}
 
 DOCUMENT_PROMPT = "Please upload related document(Optional)."
 APPLY_EXAMPLE = "Please tell me the leave type and the date in one message, for example: Apply casual leave for 10 Nov 2026, full day."
+# Per-year leave types that are not folded into the "TOTAL leave days left" line (see build_balance_text).
+LEAVE_TYPES_EXCLUDED_FROM_TOTAL = ("wfh",)
 
 ROUTER_TOOLS = [
     {"type": "function", "function": {
@@ -222,19 +224,25 @@ def build_balance_text(employee_row, owner_label=None):
     if owner_label:
         lines.append(f"These records belong to {owner_label}, not to the person asking (the person asking is HR).")
     balances = leave_store.get_leave_balances(employee_row["id"], today)
-    yearly_balances = [balance for balance in balances if balance["limit_type"] == "per_year"]
-    # The total is worked out here, in code, so the AI never has to add numbers (and never adds maternity leave to it).
+    all_per_year = [balance for balance in balances if balance["limit_type"] == "per_year"]
+    # WFH is a per_year type too, but it is not really "leave" (the employee still works, from home),
+    # so it is shown on its own and never folded into the TOTAL, the same way maternity never is.
+    yearly_balances = [balance for balance in all_per_year if balance["type_code"] not in LEAVE_TYPES_EXCLUDED_FROM_TOTAL]
     total_left = sum(float(balance["remaining_days"]) for balance in yearly_balances)
     total_allowed = sum(float(balance["days_allowed"]) for balance in yearly_balances)
     names = " + ".join(balance["type_name"] for balance in yearly_balances)
-    lines.append(f"TOTAL leave days left: {total_left:g} of {total_allowed:g} ({names}). Maternity leave is never part of this total.")
-    for balance in yearly_balances:
+    lines.append(f"TOTAL leave days left: {total_left:g} of {total_allowed:g} ({names}). "
+                 "Maternity leave and Work From Home are never part of this total.")
+    for balance in all_per_year:
         lines.append(f"{balance['type_name']}: {float(balance['days_allowed']):g} days per year, used {float(balance['used_days']):g}, "
                      f"waiting for approval {float(balance['pending_days']):g}, remaining {float(balance['remaining_days']):g}.")
     for balance in balances:
-        if balance["limit_type"] != "per_year":
+        if balance["limit_type"] == "per_request":
             lines.append(f"{balance['type_name']} (separate, not part of the total): up to {float(balance['days_allowed']):g} days "
                          "for female employees, applied on the website with a document.")
+        elif balance["limit_type"] == "unlimited":
+            lines.append(f"{balance['type_name']} (separate, not part of the total): no yearly limit, "
+                         "approved only by the super admin.")
     return "\n".join(lines)
 
 
@@ -258,7 +266,10 @@ def handle_apply_leave(employee_row, question, arguments):
     start_date = leave_service.parse_date(start_text, "start date")
     end_date = leave_service.parse_date(arguments.get("end_date") or start_text, "end date")
     day_type = arguments.get("day_type") or "full"
-    details = leave_service.check_new_leave(employee_row, leave_type_code, start_date, end_date, day_type, applied_by_chat=True)
+    # require_document=False: this is only a preview (the document, if any, is attached before "yes" is
+    # sent). run_confirmed_action re-checks everything, including the document, at confirmation time.
+    details = leave_service.check_new_leave(employee_row, leave_type_code, start_date, end_date, day_type,
+                                            applied_by_chat=True, require_document=False)
 
     reason = (arguments.get("reason") or "").strip() or None
     summary = leave_service.describe_leave(details["leave_type_name"], start_date, end_date, day_type, details["days"])

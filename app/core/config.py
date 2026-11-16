@@ -20,3 +20,10 @@ def get_required_setting(setting_name):
     if not setting_value:
         raise RuntimeError(f"Missing setting {setting_name}. Add it to the .env file.")
     return setting_value
+
+
+def get_setting(setting_name, default=None):
+    """Return a setting from the environment, or default (None) when it is not set. For optional
+    settings where the feature simply isn't configured yet (for example AiSensy) - unlike
+    get_required_setting, this never raises."""
+    return os.getenv(setting_name) or default

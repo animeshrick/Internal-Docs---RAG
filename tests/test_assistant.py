@@ -64,7 +64,9 @@ def test_the_balance_mixes_my_numbers_with_the_policy(chat):
     reply = chat("how many casual leaves do I have left?", tool_message("get_leave_balance"))
     data_sent_to_the_model = chat.state["groq_messages"][-1]
     assert "Casual Leave: 8 days per year, used 4, waiting for approval 1, remaining 3." in data_sent_to_the_model
-    assert "TOTAL leave days left: 15 of 20 (Casual Leave + Sick Leave). Maternity leave is never part of this total." in data_sent_to_the_model
+    # WFH and maternity are per_year/per_request but excluded from the TOTAL: 8+12=20 allowed, 3+12=15 remaining.
+    assert ("TOTAL leave days left: 15 of 20 (Casual Leave + Sick Leave). "
+            "Maternity leave and Work From Home are never part of this total.") in data_sent_to_the_model
     assert "Maternity Leave (separate, not part of the total): up to 90 days for female employees" in data_sent_to_the_model
     assert "110" not in data_sent_to_the_model
     assert "Casual leave is 8 days per year." in data_sent_to_the_model                 # the policy text is there too
@@ -101,7 +103,7 @@ def test_apply_asks_for_confirmation_and_saves_nothing_yet(chat):
 def test_yes_saves_the_leave_and_names_the_approver(chat):
     chat("Apply leave for 10th Nov, 2026", tool_message("apply_leave", **APPLY))
     reply = chat("Yes", {"content": "should not be asked"})
-    assert "sent to Rahul Verma for approval" in reply["answer"]
+    assert "sent to the super admin for approval" in reply["answer"]
     assert len(chat.database.leave_requests) == 1
     assert chat.database.leave_requests[0]["status"] == "pending"
 

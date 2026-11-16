@@ -18,8 +18,9 @@ The day (all times are India time; the numbers live in the attendance_settings t
 Missed check-in or check-out:
     - Not asked for a weekend (week off).
     - Asked for a day that is at most correction_window_days (7) working days old. Weekends do not count. Older days cannot be requested.
-    - Employee requests go to the PM or HR, the PM's request goes to HR, and HR's own request is approved
-      automatically with the remark "Auto".
+    - Every correction request - HR's own included - waits for the super admin to decide it. HR and the PM
+      can still see team attendance (the hierarchy above), but neither of them can approve or reject a
+      correction any more; nothing is auto-approved. See decide_correction().
 Check-in and check-out work only from the office network when network_check_enabled is true (off while testing).
 """
 import ipaddress
@@ -39,7 +40,6 @@ LEVEL_PM = "pm"
 LEVEL_EMPLOYEE = "employee"
 LEVEL_RANK = {LEVEL_SUPERADMIN: 0, LEVEL_HR: 1, LEVEL_PM: 2, LEVEL_EMPLOYEE: 3}      # a smaller number is higher in the hierarchy
 
-AUTO_APPROVAL_NOTE = "Auto"
 WEEKDAY_NAMES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
 
@@ -240,13 +240,13 @@ def evaluate_day(check_in_at, check_out_at, settings):
 
 
 def find_non_working_reason(day, holiday_name, leave_row):
-    """Why nothing is expected on this day (weekend, holiday, full day of approved leave), or None."""
+    """Why nothing is expected on this day (weekend, holiday, full day of approved leave or WFH), or None."""
     if day.weekday() >= 5:
         return "weekend"
     if holiday_name:
         return "holiday"
     if leave_row is not None and leave_row["day_type"] == "full":
-        return "on_leave"
+        return "wfh" if leave_row["leave_type"] == "wfh" else "on_leave"
     return None
 
 
@@ -271,7 +271,7 @@ def build_day_entry(day, row, holiday_name, leave_row, leave_types, today):
     elif holiday_name:
         entry["status"] = "holiday"
     elif leave_row is not None:
-        entry["status"] = "on_leave"
+        entry["status"] = "wfh" if leave_row["leave_type"] == "wfh" else "on_leave"
     elif day == today:
         entry["status"] = "not_checked_in"
     else:
@@ -281,7 +281,7 @@ def build_day_entry(day, row, holiday_name, leave_row, leave_types, today):
 
 def build_summary(entries):
     """Counts for a list of day entries."""
-    counts = {status: 0 for status in ("present", "half_day", "absent", "incomplete", "on_leave", "holiday", "weekend", "checked_in", "not_checked_in")}
+    counts = {status: 0 for status in ("present", "half_day", "absent", "incomplete", "on_leave", "wfh", "holiday", "weekend", "checked_in", "not_checked_in")}
     for entry in entries:
         counts[entry["status"]] += 1
     counts["late_days"] = sum(1 for entry in entries if entry["is_late"])
@@ -328,7 +328,7 @@ def describe_today(employee_id, today):
 
 def explain_non_working_day(reason, holiday_name):
     return {"weekend": "Today is a weekend.", "holiday": f"Today is a company holiday ({holiday_name}).",
-            "on_leave": "You are on approved leave today."}.get(reason)
+            "on_leave": "You are on approved leave today.", "wfh": "You are working from home today."}.get(reason)
 
 
 def get_today_state(employee):
@@ -531,7 +531,7 @@ def count_working_days_after(start_day, end_day):
 
 
 def create_correction(employee, work_date, check_in_text, check_out_text, reason):
-    level = require_attendance(employee)
+    require_attendance(employee)
     settings = read_settings()
     today = get_today()
     if work_date > today:
@@ -562,9 +562,7 @@ def create_correction(employee, work_date, check_in_text, check_out_text, reason
     except attendance_store.AttendanceConflictError:
         raise AttendanceError("You already have a waiting correction request for that day.", 409)
 
-    if level in (LEVEL_HR, LEVEL_SUPERADMIN):
-        # Nobody is above HR in this section, so HR's own request is approved at once.
-        row = finish_correction(row, employee["employee_id"], "approved", AUTO_APPROVAL_NOTE, settings)
+    # Every correction - HR's own included - waits for the super admin's decision; nothing is auto-approved.
     return describe_correction(row, {employee["employee_id"]: employee})
 
 
@@ -582,8 +580,11 @@ def list_my_corrections(employee):
 
 
 def list_correction_inbox(viewer):
-    """Waiting requests of the people below the viewer (the PM sees employees, HR sees the PM and employees)."""
+    """Waiting correction requests. Only the super admin decides any of these (see decide_correction),
+    so everyone else's inbox is empty - including HR's, over their own team."""
     require_viewer(viewer)
+    if viewer.get("role") != LEVEL_SUPERADMIN:
+        return []
     people = {person["employee_id"]: person for person in list_visible_people(viewer)}
     rows = attendance_store.list_corrections(list(people), status="pending")
     return [describe_correction(row, people, attendance_store.get_attendance(row["employee_id"], row["work_date"])) for row in rows]
@@ -596,6 +597,8 @@ def decide_correction(viewer, correction_id, decision, note=None):
     # A hidden or unknown request gets the same answer, so the reply never confirms that it exists.
     if row is None or requester is None or not can_view(viewer, requester) or requester["id"] == viewer["employee_id"]:
         raise AttendanceError("I could not find that request.", 404)
+    if viewer.get("role") != LEVEL_SUPERADMIN:
+        raise AttendanceError("Only the super admin can decide this request.", 403)
     if row["status"] != "pending":
         raise AttendanceError(f"This request was already {row['status']}.", 409)
     if decision == "rejected" and not (note or "").strip():
@@ -607,8 +610,8 @@ def decide_correction(viewer, correction_id, decision, note=None):
 # ------------------------------------------------------------------ the chat: plain text about one person's attendance
 def describe_entry_line(entry):
     status_names = {"present": "present", "half_day": "half day", "absent": "absent", "incomplete": "check-out missing",
-                    "on_leave": "on leave", "holiday": "holiday", "weekend": "weekend", "checked_in": "checked in, not out yet",
-                    "not_checked_in": "not checked in yet"}
+                    "on_leave": "on leave", "wfh": "working from home", "holiday": "holiday", "weekend": "weekend",
+                    "checked_in": "checked in, not out yet", "not_checked_in": "not checked in yet"}
     parts = [status_names[entry["status"]]]
     if entry["check_in_at"]:
         parts.append(f"in {format_clock(entry['check_in_at'])}" + (f", out {format_clock(entry['check_out_at'])}" if entry["check_out_at"] else ""))
@@ -646,7 +649,7 @@ def build_chat_text(viewer, person_text, month_text):
     summary = month_view["summary"]
     header = (f"Attendance for {month_view['month']} (days up to today only). Present {summary['present']}, half day {summary['half_day']}, "
               f"absent {summary['absent']}, check-out missing {summary['incomplete']}, on leave {summary['on_leave']}, "
-              f"late {summary['late_days']}, early leave {summary['early_leave_days']}, worked {summary['worked_minutes'] // 60} hours "
-              f"{summary['worked_minutes'] % 60} minutes.")
+              f"working from home {summary['wfh']}, late {summary['late_days']}, early leave {summary['early_leave_days']}, "
+              f"worked {summary['worked_minutes'] // 60} hours {summary['worked_minutes'] % 60} minutes.")
     lines = [describe_entry_line(entry) for entry in month_view["days"] if entry["status"] not in ("weekend",)]
     return owner_line + header + "\n" + "\n".join(lines)

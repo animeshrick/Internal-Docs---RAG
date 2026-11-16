@@ -18,12 +18,17 @@ class FakeDatabase:
         }
         self.leave_types = {
             "casual": {"code": "casual", "name": "Casual Leave", "days_allowed": 8, "limit_type": "per_year", "count_mode": "working_days",
-                       "applies_to_gender": None, "approver": "manager_or_hr", "can_apply_by_chat": True, "max_days_per_request": 7},
+                       "applies_to_gender": None, "approver": "manager_or_hr", "can_apply_by_chat": True, "max_days_per_request": 7,
+                       "require_document_above_days": None},
             "sick": {"code": "sick", "name": "Sick Leave", "days_allowed": 12, "limit_type": "per_year", "count_mode": "working_days",
-                     "applies_to_gender": None, "approver": "manager_or_hr", "can_apply_by_chat": True, "max_days_per_request": 7},
+                     "applies_to_gender": None, "approver": "manager_or_hr", "can_apply_by_chat": True, "max_days_per_request": 7,
+                     "require_document_above_days": 1},
             "maternity": {"code": "maternity", "name": "Maternity Leave", "days_allowed": 90, "limit_type": "per_request",
                           "count_mode": "calendar_days", "applies_to_gender": "Female", "approver": "hr_only",
-                          "can_apply_by_chat": False, "max_days_per_request": None},
+                          "can_apply_by_chat": False, "max_days_per_request": None, "require_document_above_days": None},
+            "wfh": {"code": "wfh", "name": "Work From Home", "days_allowed": 12, "limit_type": "unlimited", "count_mode": "working_days",
+                    "applies_to_gender": None, "approver": "superadmin_only", "can_apply_by_chat": True, "max_days_per_request": 5,
+                    "require_document_above_days": None},
         }
         self.holidays = {date(2026, 12, 25)}
         self.leave_requests = []
@@ -88,7 +93,8 @@ class FakeDatabase:
             rows.append({"type_code": leave_type["code"], "type_name": leave_type["name"], "limit_type": leave_type["limit_type"],
                          "days_allowed": leave_type["days_allowed"], "used_days": used, "pending_days": pending,
                          "remaining_days": leave_type["days_allowed"] - used - pending if leave_type["limit_type"] == "per_year" else None,
-                         "max_days_per_request": leave_type["max_days_per_request"], "can_apply_by_chat": leave_type["can_apply_by_chat"]})
+                         "max_days_per_request": leave_type["max_days_per_request"], "can_apply_by_chat": leave_type["can_apply_by_chat"],
+                         "require_document_above_days": leave_type["require_document_above_days"]})
         return rows
 
     # ---- requests

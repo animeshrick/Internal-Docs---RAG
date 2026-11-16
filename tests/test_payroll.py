@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.rag.answer import assistant as assistant
 from app import main
+from app.hr.payroll import pdf as payroll_pdf
 from app.hr.payroll import service as payroll_service
 from app.hr.payroll import store as payroll_store
 from app.hr.people import service as people_service
@@ -14,11 +15,11 @@ from app.hr.people import store as people_store
 from app.files import storage as storage_store
 
 PEOPLE = {
-    1: {"id": 1, "emp_id": "EMP001", "full_name": "Priya Sen", "dept": "HR", "salary": 90000, "role": "hr"},
-    3: {"id": 3, "emp_id": "EMP003", "full_name": "Ananya Das", "dept": "IT", "salary": 65000.5, "role": "employee"},
-    8: {"id": 8, "emp_id": "EMP008", "full_name": "Parvati Chouhan", "dept": "Management", "salary": 7254150, "role": "ceo"},
-    9: {"id": 9, "emp_id": "EMP009", "full_name": "No Salary", "dept": "IT", "salary": None, "role": "employee"},
-    10: {"id": 10, "emp_id": "EMP010", "full_name": "Rohan Mehta", "dept": "Tech", "salary": 5000000, "role": "employee", "is_confidential": True},
+    1: {"id": 1, "emp_id": "EMP001", "full_name": "Priya Sen", "dept": "HR", "salary": 90000, "role": "hr", "doj": "2020-01-15"},
+    3: {"id": 3, "emp_id": "EMP003", "full_name": "Ananya Das", "dept": "IT", "salary": 65000.5, "role": "employee", "doj": "2026-08-10"},
+    8: {"id": 8, "emp_id": "EMP008", "full_name": "Parvati Chouhan", "dept": "Management", "salary": 7254150, "role": "ceo", "doj": "2019-06-01"},
+    9: {"id": 9, "emp_id": "EMP009", "full_name": "No Salary", "dept": "IT", "salary": None, "role": "employee", "doj": "2026-01-01"},
+    10: {"id": 10, "emp_id": "EMP010", "full_name": "Rohan Mehta", "dept": "Tech", "salary": 5000000, "role": "employee", "is_confidential": True, "doj": "2021-01-01"},
 }
 COMPONENTS = {3: [{"component_name": "Basic", "component_type": "earning", "monthly_amount": 40000},
                   {"component_name": "HRA", "component_type": "earning", "monthly_amount": 20000.5},
@@ -213,3 +214,153 @@ def test_only_hr_may_upload_and_only_pdf_with_a_valid_month(api):
     assert client.post("/payroll/payslips?emp_id=EMP003&month=October", content=b"x", headers=pdf).status_code == 422
     assert client.post("/payroll/payslips?emp_id=NOBODY&month=2026-10", content=b"x", headers=pdf).status_code == 404
     assert api.uploads == [] and api.saved == []
+
+
+# ------------------------------------------------------------------ self-serve generation (list + download-url)
+def test_list_my_payslip_months_is_january_to_december_of_the_given_year(monkeypatch):
+    monkeypatch.setattr(payroll_service, "get_today", lambda: date(2026, 11, 20))
+    monkeypatch.setattr(payroll_store, "list_payslips", lambda employee_id: PAYSLIPS.get(employee_id, []))
+    months = payroll_service.list_my_payslip_months(EMPLOYEE, 2026)  # EMP003 joined 2026-08-10
+    assert [m["month"] for m in months] == [f"2026-{n:02d}" for n in range(1, 13)]
+    # Jan-Jul: before this employee joined. Aug-Nov: within employment. Dec: in the future.
+    assert [m["disabled_reason"] for m in months] == ["before_joining"] * 7 + [None] * 4 + ["future"]
+    assert [m["available"] for m in months] == [False] * 8 + [True, True] + [False] * 2  # only Sep and Oct have a payslip
+    assert months[9]["label"] == "October 2026"
+
+
+def test_list_my_payslip_months_defaults_to_the_current_year(monkeypatch):
+    monkeypatch.setattr(payroll_service, "get_today", lambda: date(2026, 11, 20))
+    monkeypatch.setattr(payroll_store, "list_payslips", lambda employee_id: PAYSLIPS.get(employee_id, []))
+    assert payroll_service.list_my_payslip_months(EMPLOYEE) == payroll_service.list_my_payslip_months(EMPLOYEE, 2026)
+
+
+def test_list_my_payslip_months_for_an_earlier_year_is_all_before_joining(monkeypatch):
+    monkeypatch.setattr(payroll_service, "get_today", lambda: date(2026, 11, 20))
+    monkeypatch.setattr(payroll_store, "list_payslips", lambda employee_id: [])
+    months = payroll_service.list_my_payslip_months(EMPLOYEE, 2025)  # EMP003 joined in August 2026
+    assert [m["disabled_reason"] for m in months] == ["before_joining"] * 12
+
+
+def test_list_my_payslip_months_is_empty_without_a_joining_date(monkeypatch):
+    monkeypatch.setattr(payroll_store, "get_salary_details", lambda employee_id: {"id": 9, "emp_id": "EMP009", "salary": None, "doj": None})
+    monkeypatch.setattr(payroll_store, "list_payslips", lambda employee_id: [])
+    assert payroll_service.list_my_payslip_months({"employee_id": 9, "emp_id": "EMP009", "role": "employee"}) == []
+
+
+def test_list_my_payslip_years_runs_from_joining_year_to_current_year_newest_first(monkeypatch):
+    monkeypatch.setattr(payroll_service, "get_today", lambda: date(2026, 11, 20))
+    assert payroll_service.list_my_payslip_years(EMPLOYEE) == [2026]  # EMP003 joined in 2026
+    assert payroll_service.list_my_payslip_years(CEO) == list(range(2026, 2018, -1))  # CEO joined 2019-06-01
+
+
+def test_list_my_payslip_years_is_empty_without_a_joining_date(monkeypatch):
+    monkeypatch.setattr(payroll_store, "get_salary_details", lambda employee_id: {"id": 9, "emp_id": "EMP009", "salary": None, "doj": None})
+    assert payroll_service.list_my_payslip_years({"employee_id": 9, "emp_id": "EMP009", "role": "employee"}) == []
+
+
+def test_add_month_rolls_over_the_year():
+    assert payroll_service.add_month(date(2026, 12, 1)) == date(2027, 1, 1)
+    assert payroll_service.add_month(date(2026, 3, 1)) == date(2026, 4, 1)
+
+
+def test_get_or_build_payslip_link_reuses_an_existing_payslip(monkeypatch):
+    calls = []
+    monkeypatch.setattr(storage_store, "create_signed_link", lambda bucket, path: f"https://signed.example/{bucket}/{path}")
+    monkeypatch.setattr(payroll_pdf, "build_payslip_pdf", lambda *a, **k: calls.append("built") or b"%PDF-FAKE")
+    result = payroll_service.get_or_build_payslip_link(EMPLOYEE, "2026-10")
+    assert result["url"] == "https://signed.example/payslips/3/2026-10-01-a.pdf"
+    assert calls == []  # the existing payslip is reused, nothing is generated
+
+
+def test_get_or_build_payslip_link_generates_a_missing_one(monkeypatch):
+    monkeypatch.setattr(payroll_service, "get_today", lambda: date(2026, 11, 5))
+    built = {}
+
+    def fake_build(employee, components, month_label, net_pay, payable_days=None):
+        built["employee"], built["components"], built["month_label"], built["net_pay"], built["payable_days"] = employee, components, month_label, net_pay, payable_days
+        return b"%PDF-FAKE"
+
+    uploads = []
+    saved = []
+    monkeypatch.setattr(payroll_pdf, "build_payslip_pdf", fake_build)
+    monkeypatch.setattr(storage_store, "upload_file", lambda bucket, path, data, content_type: uploads.append((bucket, path, data, content_type)))
+    monkeypatch.setattr(storage_store, "create_signed_link", lambda bucket, path: f"https://signed.example/{bucket}/{path}")
+    monkeypatch.setattr(payroll_store, "save_payslip", lambda employee_id, pay_month, net_pay, file_path: saved.append((employee_id, pay_month, net_pay, file_path)))
+
+    result = payroll_service.get_or_build_payslip_link(EMPLOYEE, "2026-11")  # no payslip exists for November yet
+
+    assert built["month_label"] == "November 2026"
+    assert built["payable_days"] == 30   # calendar days in November
+    assert built["net_pay"] == 40000 + 20000.5 - 4800   # earnings minus deductions, from COMPONENTS
+    assert uploads[0][0] == "payslips" and uploads[0][1].startswith("3/2026-11-01-") and uploads[0][3] == "application/pdf"
+    assert saved[0] == (3, date(2026, 11, 1), 40000 + 20000.5 - 4800, uploads[0][1])
+    assert result["url"] == f"https://signed.example/payslips/{uploads[0][1]}"
+
+
+def test_get_or_build_payslip_link_refuses_a_month_outside_employment(monkeypatch):
+    monkeypatch.setattr(payroll_service, "get_today", lambda: date(2026, 11, 5))
+    with pytest.raises(payroll_service.PayrollError, match="outside your employment period"):
+        payroll_service.get_or_build_payslip_link(EMPLOYEE, "2026-01")  # EMP003 joined in August 2026
+    with pytest.raises(payroll_service.PayrollError, match="outside your employment period"):
+        payroll_service.get_or_build_payslip_link(EMPLOYEE, "2026-12")  # the future
+
+
+def test_get_or_build_payslip_link_refuses_when_salary_is_not_recorded(monkeypatch):
+    monkeypatch.setattr(payroll_service, "get_today", lambda: date(2026, 11, 5))
+    no_salary = {"employee_id": 9, "emp_id": "EMP009", "role": "employee"}
+    with pytest.raises(payroll_service.PayrollError, match="not recorded yet"):
+        payroll_service.get_or_build_payslip_link(no_salary, "2026-02")
+
+
+# ------------------------------------------------------------------ self-serve endpoints
+def test_my_payslip_months_endpoint(api, monkeypatch):
+    api.employee = {"employee_id": 3, "emp_id": "EMP003", "full_name": "Ananya Das", "dept": "IT", "role": "employee", "must_change_password": False}
+    monkeypatch.setattr(payroll_service, "get_today", lambda: date(2026, 10, 15))
+    monkeypatch.setattr(main.payroll_store, "get_salary_details", lambda employee_id: dict(PEOPLE[3]))
+    monkeypatch.setattr(main.payroll_store, "list_payslips", lambda employee_id: PAYSLIPS.get(employee_id, []))
+    response = client.get("/payroll/payslips/mine", headers=HEADERS)  # no ?year, so the current year (2026)
+    assert response.status_code == 200
+    assert [row["month"] for row in response.json()] == [f"2026-{n:02d}" for n in range(1, 13)]
+
+    response = client.get("/payroll/payslips/mine?year=2025", headers=HEADERS)
+    assert response.status_code == 200
+    assert [row["disabled_reason"] for row in response.json()] == ["before_joining"] * 12
+
+
+def test_my_payslip_years_endpoint(api, monkeypatch):
+    api.employee = {"employee_id": 3, "emp_id": "EMP003", "full_name": "Ananya Das", "dept": "IT", "role": "employee", "must_change_password": False}
+    monkeypatch.setattr(payroll_service, "get_today", lambda: date(2026, 10, 15))
+    monkeypatch.setattr(main.payroll_store, "get_salary_details", lambda employee_id: dict(PEOPLE[3]))
+    response = client.get("/payroll/payslips/mine/years", headers=HEADERS)
+    assert response.status_code == 200
+    assert response.json() == [2026]  # EMP003 joined in 2026
+
+
+def test_my_payslip_download_url_endpoint(api, monkeypatch):
+    api.employee = {"employee_id": 3, "emp_id": "EMP003", "full_name": "Ananya Das", "dept": "IT", "role": "employee", "must_change_password": False}
+    monkeypatch.setattr(payroll_service, "get_today", lambda: date(2026, 10, 15))
+    monkeypatch.setattr(main.payroll_store, "get_salary_details", lambda employee_id: dict(PEOPLE[3]))
+    monkeypatch.setattr(main.storage_store, "create_signed_link", lambda bucket, path: f"https://signed.example/{bucket}/{path}")
+    response = client.get("/payroll/payslips/mine/2026-10/download-url", headers=HEADERS)
+    assert response.status_code == 200
+    assert response.json()["url"] == "https://signed.example/payslips/3/2026-10-01-a.pdf"
+
+
+def test_my_payslip_download_url_endpoint_generates_a_missing_month(api, monkeypatch):
+    api.employee = {"employee_id": 3, "emp_id": "EMP003", "full_name": "Ananya Das", "dept": "IT", "role": "employee", "must_change_password": False}
+    monkeypatch.setattr(payroll_service, "get_today", lambda: date(2026, 11, 5))
+    monkeypatch.setattr(main.payroll_store, "get_salary_details", lambda employee_id: dict(PEOPLE[3]))
+    monkeypatch.setattr(payroll_pdf, "build_payslip_pdf", lambda *a, **k: b"%PDF-FAKE")
+    monkeypatch.setattr(main.storage_store, "create_signed_link", lambda bucket, path: f"https://signed.example/{bucket}/{path}")
+    response = client.get("/payroll/payslips/mine/2026-11/download-url", headers=HEADERS)
+    assert response.status_code == 200
+    assert "signed.example/payslips/3/2026-11-01-" in response.json()["url"]
+    assert api.saved[0][:3] == (3, date(2026, 11, 1), 40000 + 20000.5 - 4800)
+
+
+def test_my_payslip_download_url_endpoint_refuses_outside_employment(api, monkeypatch):
+    api.employee = {"employee_id": 3, "emp_id": "EMP003", "full_name": "Ananya Das", "dept": "IT", "role": "employee", "must_change_password": False}
+    monkeypatch.setattr(payroll_service, "get_today", lambda: date(2026, 11, 5))
+    monkeypatch.setattr(main.payroll_store, "get_salary_details", lambda employee_id: dict(PEOPLE[3]))
+    response = client.get("/payroll/payslips/mine/2026-01/download-url", headers=HEADERS)
+    assert response.status_code == 400

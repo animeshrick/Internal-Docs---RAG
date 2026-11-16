@@ -64,7 +64,8 @@ class FakeAttendanceDatabase:
                      "list_corrections update_correction").split():
             monkeypatch.setattr(attendance_store, name, getattr(self, name))
         monkeypatch.setattr(people_store, "find_employee", self.find_employee)
-        monkeypatch.setattr(leave_store, "get_leave_types", lambda: {"casual": {"name": "Casual Leave"}})
+        monkeypatch.setattr(leave_store, "get_leave_types",
+                        lambda: {"casual": {"name": "Casual Leave"}, "wfh": {"name": "Work From Home"}})
         return self
 
     def new_id(self):

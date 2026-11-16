@@ -7,14 +7,19 @@ Rules (agreed with HR):
     - Full day or half day. A half day is a single date.
     - One request spans at most 7 consecutive days (maternity has no such limit).
     - A leave can start at most 7 days in the past.
-    - Maternity (Female only) is applied on the website with a document, and only HR approves it.
-    - Other leaves: the reporting manager approves; an employee without a manager_id is approved by the PM.
-      HR can approve everything. The PM's own leave is approved by HR only. Nobody approves their own leave.
+    - Maternity (Female only) is applied on the website with a document.
+    - Sick Leave for more than 1 day needs a supporting document too (require_document_above_days in leave_types);
+      1 day or less can still be applied in the chat with no document, as before.
+    - Work From Home (wfh) has no yearly quota and no per-request day limit (limit_type "unlimited" -
+      see 17_wfh_unlimited.sql).
+    - EVERY leave - casual, sick, maternity and WFH alike - is decided only by the super admin. HR has
+      no special approving power here: HR's own leave goes through the same queue as anyone else's, and
+      HR cannot decide anyone else's leave either. Nobody approves their own leave. See can_decide().
 """
 from datetime import date, datetime, timedelta, timezone
 
 from app.hr.leave import store as leave_store
-from app.identity.auth import HR_LEVEL_ROLES, parse_timestamp
+from app.identity.auth import parse_timestamp
 
 BACKDATE_LIMIT_DAYS = 7
 LEAVE_YEAR_START_MONTH = 4      # the leave year starts on 1 April (keep equal to the value in sql/04_leave_system.sql)
@@ -130,6 +135,11 @@ def check_new_leave(employee_row, leave_type_code, start_date, end_date, day_typ
     if days <= 0:
         raise LeaveError("Those dates fall on a weekend or a company holiday, so no leave is needed.")
 
+    document_threshold = leave_type.get("require_document_above_days")
+    if require_document and document_threshold is not None and days > float(document_threshold) and not document_path:
+        raise LeaveError(f"{leave_type['name']} needs a supporting document when it is for more than "
+                         f"{format_days(float(document_threshold))}. Please upload one.")
+
     overlapping = leave_store.find_overlapping_requests(employee_row["id"], start_date, end_date)
     if overlapping:
         first = overlapping[0]
@@ -143,8 +153,11 @@ def check_new_leave(employee_row, leave_type_code, start_date, end_date, day_typ
         if days > remaining_days:
             raise LeaveError(f"{who} {has} only {format_days(remaining_days)} of {leave_type['name']} left for {leave_year_label(start_date)}, "
                              f"and this request needs {format_days(days)}.")
-    elif days > float(leave_type["days_allowed"]):
-        raise LeaveError(f"{leave_type['name']} allows at most {float(leave_type['days_allowed']):g} days per request.")
+    elif leave_type["limit_type"] == "per_request":
+        if days > float(leave_type["days_allowed"]):
+            raise LeaveError(f"{leave_type['name']} allows at most {float(leave_type['days_allowed']):g} days per request.")
+    # "unlimited" (Work From Home): no yearly quota and no per-request day cap here - only
+    # max_days_per_request (checked earlier) limits a single request's length.
 
     return {
         "leave_type": leave_type["code"],
@@ -172,22 +185,8 @@ def is_pm(person):
 
 
 def find_approver_name(employee_row, leave_type_code):
-    """
-    Who will see this request:
-        maternity            -> HR
-        the PM's own leave   -> HR
-        has a manager_id     -> that manager
-        no manager_id        -> the PM (HR can always approve as well)
-    """
-    leave_type = leave_store.get_leave_types().get(leave_type_code, {})
-    if leave_type.get("approver") == "hr_only" or is_pm(employee_row):
-        return "HR"
-    if employee_row.get("manager_id"):
-        manager = leave_store.get_employee_row(employee_row["manager_id"])
-        return manager["full_name"] if manager else "HR"
-    project_managers = [row["full_name"] for row in leave_store.list_active_employees_in_department(PM_DEPARTMENT)
-                        if row["id"] != employee_row["id"]]
-    return " or ".join(project_managers) if project_managers else "HR"
+    """Who will see this request: the super admin, always - every leave type is decided only by them."""
+    return "the super admin"
 
 
 def save_leave_request(employee_row, details, reason=None):
@@ -210,15 +209,15 @@ def save_leave_request(employee_row, details, reason=None):
 
 # ------------------------------------------------------------------ cancelling
 def check_cancellable(employee_row, leave_id):
-    """Return the leave row if this employee may cancel it. A pending leave, or an approved one that has not started."""
+    """Return the leave row if this employee may cancel it. Only a still-pending leave qualifies - once
+    the super admin has approved (or rejected) it, the employee can no longer undo it themselves, even
+    if it has not started yet. Only the super admin can change it from there."""
     leave_row = leave_store.get_leave_request(leave_id)
     if leave_row is None or leave_row["employee_id"] != employee_row["id"]:
         raise LeaveError("I could not find that leave request in your leaves.", 404)
     if leave_row["status"] == "pending":
         return leave_row
-    if leave_row["status"] == "approved" and date.fromisoformat(leave_row["start_date"]) >= get_today():
-        return leave_row
-    raise LeaveError(f"A {leave_row['status']} leave cannot be cancelled. A leave that has already started can only be changed by HR.")
+    raise LeaveError(f"A {leave_row['status']} leave cannot be cancelled. Once the super admin has decided it, only the super admin can change it.")
 
 
 def cancel_leave(employee_row, leave_id):
@@ -231,33 +230,23 @@ def cancel_leave(employee_row, leave_id):
 
 
 # ------------------------------------------------------------------ approving (manager or HR)
-def can_decide(approver, leave_row, requester_row, leave_type):
+def can_decide(approver, leave_row, requester_row=None, leave_type=None):
     """
-    approver is the logged-in employee dictionary (it has "role", "employee_id" and "dept").
-    HR can decide everything. Otherwise: the reporting manager decides, and when the employee has no
-    manager_id the PM decides. Maternity and the PM's own leave are for HR only. Nobody decides their own leave.
+    approver is the logged-in employee dictionary (it has "role" and "employee_id"). Every leave, of
+    every type, is decided only by the super admin now - not HR, not the reporting manager, not the
+    PM. HR is treated like any other employee here, including for its own leave. Nobody decides their
+    own leave (moot for the super admin, which has none of its own - see refuse_superadmin).
     """
     if leave_row["employee_id"] == approver["employee_id"]:
-        return False                                          # nobody approves their own leave
-    if approver["role"] in HR_LEVEL_ROLES:
-        return True
-    if leave_type.get("approver") == "hr_only" or is_pm(requester_row):
         return False
-    if requester_row.get("manager_id"):
-        return requester_row["manager_id"] == approver["employee_id"]
-    return is_pm(approver)
+    return approver["role"] == "superadmin"
 
 
 def list_approvals(approver):
-    """Pending leaves this person may decide, with the employee's name."""
-    if approver["role"] in HR_LEVEL_ROLES:
-        pending_rows = leave_store.list_pending_requests()
-    else:
-        candidate_ids = leave_store.list_direct_report_ids(approver["employee_id"])
-        if is_pm(approver):
-            candidate_ids = candidate_ids + leave_store.list_unmanaged_employee_ids()
-        pending_rows = leave_store.list_pending_requests(candidate_ids)
-
+    """Pending leaves this person may decide, with the employee's name. Only the super admin decides any leave."""
+    if approver["role"] != "superadmin":
+        return []
+    pending_rows = leave_store.list_pending_requests()
     employees = leave_store.get_employees_by_ids([row["employee_id"] for row in pending_rows])
     leave_types = leave_store.get_leave_types()
     approvals = []
@@ -291,7 +280,7 @@ def decide_leave(approver, leave_id, decision, note=None):
     if leave_row["employee_id"] == approver["employee_id"]:
         raise LeaveError("You cannot approve or reject your own leave.", 403)
     if not can_decide(approver, leave_row, requester, leave_type):
-        raise LeaveError("Only the reporting manager (or the PM when there is no manager) or HR can decide this leave.", 403)
+        raise LeaveError("Only the super admin can decide this leave.", 403)
     if decision == "rejected" and not (note or "").strip():
         raise LeaveError("Please write the reason for rejecting this leave.", 400)
 

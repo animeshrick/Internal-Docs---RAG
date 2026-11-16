@@ -6,7 +6,7 @@ import requests
 
 from app.core.supabase import REQUEST_TIMEOUT_SECONDS, build_headers, check_response, flatten_role, get_table_url, read_rows
 
-SALARY_COLUMNS = "id,emp_id,full_name,dept,salary,employee_auth(role)"
+SALARY_COLUMNS = "id,emp_id,full_name,dept,salary,doj,pan,bank_account_number,ifsc_code,tax_regime,employee_auth(role)"
 CEO_NAMES = ("ceo", "the ceo", "chief executive officer")
 
 
@@ -54,3 +54,9 @@ def save_payslip(employee_id, pay_month, net_pay, file_path):
         timeout=REQUEST_TIMEOUT_SECONDS,
     )
     check_response(response, "Saving the payslip")
+
+
+def list_payslips(employee_id):
+    """Every payslip this employee has, newest month first."""
+    return read_rows("payslips", {"select": "pay_month,net_pay,file_path", "employee_id": f"eq.{employee_id}",
+                                   "order": "pay_month.desc"}, "Reading the payslips")

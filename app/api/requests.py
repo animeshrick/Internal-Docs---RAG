@@ -107,6 +107,13 @@ class OfficeNetworkRequest(BaseModel):
     cidr: str = Field(min_length=1, max_length=50)
 
 
+class WhatsAppNumberRequest(BaseModel):
+    """One number to receive the twice-daily WhatsApp HR report, for example +919876543210."""
+
+    label: str = Field(min_length=1, max_length=100)
+    phone_number: str = Field(min_length=1, max_length=20)
+
+
 class OfficeNetworkActiveRequest(BaseModel):
     is_active: bool
 
@@ -128,3 +135,8 @@ class LeaveDecisionRequest(BaseModel):
 
 class AttachDocumentRequest(BaseModel):
     document_path: str = Field(min_length=1, max_length=300)
+
+
+# ------------------------------------------------------------------ shared documents
+class DocumentAccessDecisionRequest(BaseModel):
+    decision: Literal["approved", "denied"]
