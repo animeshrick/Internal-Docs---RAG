@@ -146,8 +146,8 @@ is missing `bcrypt` and `PyJWT`, which `app/identity/auth.py` imports at startup
 No `.env` goes into the image; `.dockerignore` blocks it. `load_dotenv` is a
 no-op when the file is absent, so the platform's environment variables are used
 as they are. Required: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `JWT_SECRET_KEY`,
-`GROQ_API_KEY`. Optional: `LOG_LEVEL`, `CORS_ALLOWED_ORIGINS`, `GROQ_ANSWER_MODEL`,
-`GROQ_REWRITE_MODEL`. Put the four secrets in AWS Secrets Manager or SSM
+`ANTHROPIC_API_KEY`. Optional: `LOG_LEVEL`, `CORS_ALLOWED_ORIGINS`, `CLAUDE_MODEL`
+(defaults to `claude-haiku-5-5`, the one model this app uses for everything). Put the four secrets in AWS Secrets Manager or SSM
 Parameter Store and reference them from the task definition rather than pasting
 them as plain environment variables.
 

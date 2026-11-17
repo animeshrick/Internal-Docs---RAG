@@ -125,23 +125,26 @@ def build_daily_report_text(for_date=None):
     wfh = [person for person, entry in pairs if entry["status"] == "wfh"]
     checked_in = [(person, entry) for person, entry in pairs if entry["check_in_at"]]
 
+    # *word* is WhatsApp's own bold markdown (not Markdown, just WhatsApp's) - bolding each section
+    # header is what actually makes this readable in the chat; everything else is plain text so the
+    # message doesn't turn into a wall of bold.
     lines = [f"*Daily HR Report - {leave_service.format_date(for_date)}*"]
     note = day_off_note(for_date)
     if note:
         lines.append(note)
     lines.append("")
-    lines.append(f"Attendance ({len(pairs)} tracked)")
+    lines.append(f"*Attendance ({len(pairs)} tracked)*")
     lines.append(f"Present: {len(present)}")
     lines.append("Late: " + (", ".join(person["full_name"] for person in late) if late else "none"))
     lines.append("Not checked in / absent: " + (", ".join(person["full_name"] for person in absent) if absent else "none"))
     lines.append("")
-    lines.append(f"On leave today ({len(on_leave)})")
+    lines.append(f"*On leave today ({len(on_leave)})*")
     lines.extend([f"- {person['full_name']} - {entry['note']}" for person, entry in on_leave] or ["- Nobody"])
     lines.append("")
-    lines.append(f"Work From Home today ({len(wfh)})")
+    lines.append(f"*Work From Home today ({len(wfh)})*")
     lines.extend([f"- {person['full_name']}" for person in wfh] or ["- Nobody"])
     lines.append("")
-    lines.append(f"Check-in times ({len(checked_in)})")
+    lines.append(f"*Check-in times ({len(checked_in)})*")
     lines.extend([f"- {person['full_name']} - {attendance_service.format_clock(entry['check_in_at'])}"
                   for person, entry in checked_in] or ["- Nobody has checked in yet"])
     # No closing "This is an automated report..." line here - that is the AiSensy template's own
@@ -149,15 +152,60 @@ def build_daily_report_text(for_date=None):
     return "\n".join(lines)
 
 
+def leave_description(person, entry):
+    """"Casual Leave (full day)" (entry["note"], see attendance/service.py) reshaped into
+    "Harry HR (Casual Leave, full day)" - the format the daily_hr_report_v2 template's {{6}}
+    variable shows (see build_daily_report_fields)."""
+    inline_note = entry["note"].replace(" (", ", ").rstrip(")")
+    return f"{person['full_name']} ({inline_note})"
+
+
+def build_daily_report_fields(for_date=None):
+    """The report as 8 separate values, one per {{n}} variable in the daily_hr_report_v2 AiSensy
+    template (see areas/hrms-whatsapp-report.md) - replaces the original single-block {{1}}
+    design, which the account's AiSensy template no longer matches. Same underlying data as
+    build_daily_report_text(), reshaped into AiSensy's templateParams list, in this exact order:
+        1. date                              5. not checked in / absent (names, "none" if empty)
+        2. attendance tracked count           6. on leave today (name + leave type + day, "Nobody")
+        3. present count                      7. work from home today (names, "Nobody")
+        4. late (names, "none" if empty)      8. check-in times (name + time, "Nobody has checked in yet")
+
+    NOTE: day_off_note() (the weekend/company-holiday line) has no variable slot in this template
+    and is not included here - the old single-block report showed it, this one currently does not.
+    Flag to Debayan/Animesh if that still needs a home in the template.
+    """
+    for_date = for_date or attendance_service.get_today()
+    pairs = people_with_entries(for_date)
+
+    present = [person for person, entry in pairs if entry["status"] in ("present", "half_day", "checked_in")]
+    late = [person for person, entry in pairs if entry["is_late"]]
+    absent = [person for person, entry in pairs if entry["status"] in ("absent", "not_checked_in")]
+    on_leave = [(person, entry) for person, entry in pairs if entry["status"] == "on_leave"]
+    wfh = [person for person, entry in pairs if entry["status"] == "wfh"]
+    checked_in = [(person, entry) for person, entry in pairs if entry["check_in_at"]]
+
+    return [
+        leave_service.format_date(for_date),
+        str(len(pairs)),
+        str(len(present)),
+        ", ".join(person["full_name"] for person in late) if late else "none",
+        ", ".join(person["full_name"] for person in absent) if absent else "none",
+        ", ".join(leave_description(person, entry) for person, entry in on_leave) if on_leave else "Nobody",
+        ", ".join(person["full_name"] for person in wfh) if wfh else "Nobody",
+        ", ".join(f"{person['full_name']} {attendance_service.format_clock(entry['check_in_at'])}"
+                  for person, entry in checked_in) if checked_in else "Nobody has checked in yet",
+    ]
+
+
 # ------------------------------------------------------------------ sending
 def send_daily_report(for_date=None):
     """Build today's report and send it to every configured number. One number's failure (for
     example AiSensy refusing it) never stops the others. Returns one result per number."""
-    report_text = build_daily_report_text(for_date)
+    report_fields = build_daily_report_fields(for_date)
     results = []
     for entry in reports_store.list_numbers():
         try:
-            aisensy.send_report(entry["phone_number"], [report_text])
+            aisensy.send_report(entry["phone_number"], report_fields)
             results.append({"label": entry["label"], "phone_number": entry["phone_number"], "ok": True, "error": None})
         except aisensy.AiSensyError as error:
             logger.error("WhatsApp HR report to %s (%s) failed: %s", entry["label"], entry["phone_number"], error)

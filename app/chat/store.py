@@ -28,6 +28,18 @@ def save_exchange(employee_id, question_text, asked_at, answer_text, sources, an
     return saved_rows[0], saved_rows[1]
 
 
+def save_assistant_message(employee_id, message_text, created_at):
+    """Save one assistant-only message, with no question before it (used by the 7:30pm checkout
+    reminder - see hr/attendance/checkout_reminder.py). Everything else about the row is the same
+    as the assistant half of save_exchange."""
+    response = requests.post(get_table_url(CHAT_MESSAGES_TABLE_NAME), headers=build_headers({"Prefer": "return=representation"}),
+                             json={"employee_id": employee_id, "sender": "assistant", "message": message_text, "sources": [],
+                                   "created_at": created_at.isoformat()},
+                             timeout=REQUEST_TIMEOUT_SECONDS)
+    check_response(response, "Saving the chat message")
+    return response.json()[0]
+
+
 def list_messages(employee_id, limit, before_id=None):
     """The newest messages of one employee, returned oldest first. before_id loads the page before it."""
     params = {"select": "id,sender,message,sources,created_at", "employee_id": f"eq.{employee_id}",

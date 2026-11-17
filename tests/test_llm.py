@@ -1,21 +1,11 @@
-"""Tests for app/llm.py. No real Groq or Supabase calls are made."""
+"""Tests for app/llm.py. No real Claude or Supabase calls are made.
+
+The low-level HTTP mechanics (retries, auth header, request/response shape) now live one layer down,
+in app/core/claude.py, and are tested in test_claude_client.py instead. These tests cover what this
+file itself does: rewriting the question, building the answer prompt, and cleaning/citing the reply."""
 import pytest
 
 from app.rag.answer import llm as llm
-
-
-class FakeResponse:
-    def __init__(self, status_code=200, reply_text="", text=""):
-        self.status_code = status_code
-        self._reply_text = reply_text
-        self.text = text
-
-    @property
-    def ok(self):
-        return self.status_code < 400
-
-    def json(self):
-        return {"choices": [{"message": {"content": self._reply_text}}]}
 
 
 def make_chunk(number=1, doc_id="IT-SEC-008", version="1.2", effective_date="2026-01-01"):
@@ -26,47 +16,6 @@ def make_chunk(number=1, doc_id="IT-SEC-008", version="1.2", effective_date="202
     }
 
 
-@pytest.fixture(autouse=True)
-def groq_key(monkeypatch):
-    monkeypatch.setenv("GROQ_API_KEY", "test-key")
-
-
-# ---------------------------------------------------------------- call_groq
-def test_call_groq_sends_model_messages_and_temperature_zero(monkeypatch):
-    sent = {}
-
-    def fake_post(url, headers=None, json=None, timeout=None):
-        sent["url"], sent["headers"], sent["body"] = url, headers, json
-        return FakeResponse(reply_text="  hello  ")
-
-    monkeypatch.setattr(llm.requests, "post", fake_post)
-    reply = llm.call_groq("some-model", [{"role": "user", "content": "hi"}], max_tokens=50)
-    assert reply == "hello"                                   # spaces removed
-    assert sent["url"] == llm.GROQ_API_URL
-    assert sent["headers"]["Authorization"] == "Bearer test-key"
-    assert sent["body"]["model"] == "some-model"
-    assert sent["body"]["temperature"] == 0.0
-    assert sent["body"]["max_tokens"] == 50
-
-
-def test_call_groq_asks_for_low_reasoning_effort_by_default(monkeypatch):
-    sent = {}
-    monkeypatch.setattr(llm.requests, "post",
-                        lambda url, headers=None, json=None, timeout=None: (sent.update(json), FakeResponse(reply_text="ok"))[1])
-    monkeypatch.setattr(llm, "REASONING_EFFORT", "low")
-    llm.call_groq("m", [], 10)
-    assert sent["reasoning_effort"] == "low"
-
-
-def test_call_groq_leaves_out_reasoning_effort_when_it_is_turned_off(monkeypatch):
-    sent = {}
-    monkeypatch.setattr(llm.requests, "post",
-                        lambda url, headers=None, json=None, timeout=None: (sent.update(json), FakeResponse(reply_text="ok"))[1])
-    monkeypatch.setattr(llm, "REASONING_EFFORT", "")
-    llm.call_groq("m", [], 10)
-    assert "reasoning_effort" not in sent
-
-
 def test_token_limits_leave_room_for_thinking():
     # 60 tokens gave an empty rewrite in a real test, so the limits must stay well above that.
     assert llm.REWRITE_MAX_TOKENS >= 400
@@ -75,58 +24,33 @@ def test_token_limits_leave_room_for_thinking():
 
 def test_rewrite_and_answer_use_the_generous_token_limits(monkeypatch):
     limits = []
-    monkeypatch.setattr(llm, "call_groq", lambda model_name, messages, max_tokens, temperature=0.0: (limits.append(max_tokens), "reply [1]")[1])
+    monkeypatch.setattr(llm, "call_claude", lambda model_name, messages, max_tokens, temperature=0.0: (limits.append(max_tokens), "reply [1]")[1])
     monkeypatch.setattr(llm, "search_chunks", lambda search_text, number_of_results: [make_chunk(1)])
     llm.answer_question("Can I use ChatGPT?")
     assert limits == [llm.REWRITE_MAX_TOKENS, llm.ANSWER_MAX_TOKENS]
 
 
-def test_call_groq_waits_and_retries_on_rate_limit(monkeypatch):
-    answers = [FakeResponse(status_code=429), FakeResponse(reply_text="ok")]
-    monkeypatch.setattr(llm.requests, "post", lambda *args, **kwargs: answers.pop(0))
-    waited = []
-    monkeypatch.setattr(llm.time, "sleep", waited.append)
-    assert llm.call_groq("m", [], 10) == "ok"
-    assert waited == [llm.SECONDS_TO_WAIT_BEFORE_RETRY]
-
-
-def test_call_groq_stops_after_the_last_attempt(monkeypatch):
-    monkeypatch.setattr(llm.requests, "post", lambda *args, **kwargs: FakeResponse(status_code=429, text="slow down"))
-    monkeypatch.setattr(llm.time, "sleep", lambda seconds: None)
-    with pytest.raises(RuntimeError, match="429"):
-        llm.call_groq("m", [], 10)
-
-
-def test_call_groq_does_not_retry_a_wrong_key(monkeypatch):
-    calls = []
-    monkeypatch.setattr(llm.requests, "post",
-                        lambda *args, **kwargs: (calls.append(1), FakeResponse(status_code=401, text="bad key"))[1])
-    with pytest.raises(RuntimeError, match="401"):
-        llm.call_groq("m", [], 10)
-    assert len(calls) == 1
-
-
 # ---------------------------------------------------------------- rewrite
 def test_rewrite_returns_the_first_line_without_quotes(monkeypatch):
-    monkeypatch.setattr(llm, "call_groq", lambda *args, **kwargs: '"use of generative AI tools"\nextra line')
+    monkeypatch.setattr(llm, "call_claude", lambda *args, **kwargs: '"use of generative AI tools"\nextra line')
     assert llm.rewrite_question("Can I use ChatGPT?") == "use of generative AI tools"
 
 
 def test_rewrite_falls_back_to_the_original_question_on_error(monkeypatch):
     def failing_call(*args, **kwargs):
-        raise RuntimeError("Groq is down")
-    monkeypatch.setattr(llm, "call_groq", failing_call)
+        raise RuntimeError("Claude is down")
+    monkeypatch.setattr(llm, "call_claude", failing_call)
     assert llm.rewrite_question("Can I use ChatGPT?") == "Can I use ChatGPT?"
 
 
 def test_rewrite_falls_back_when_reply_is_empty(monkeypatch):
-    monkeypatch.setattr(llm, "call_groq", lambda *args, **kwargs: "")
+    monkeypatch.setattr(llm, "call_claude", lambda *args, **kwargs: "")
     assert llm.rewrite_question("Original?") == "Original?"
 
 
 def test_rewrite_uses_the_small_model(monkeypatch):
     used = {}
-    monkeypatch.setattr(llm, "call_groq", lambda model_name, *args, **kwargs: used.setdefault("model", model_name) or "x")
+    monkeypatch.setattr(llm, "call_claude", lambda model_name, *args, **kwargs: used.setdefault("model", model_name) or "x")
     llm.rewrite_question("q?")
     assert used["model"] == llm.REWRITE_MODEL_NAME
 
@@ -189,12 +113,12 @@ def prepare_flow(monkeypatch, rewritten, answer, chunks=None):
         calls["searched_text"], calls["number_of_results"] = search_text, number_of_results
         return chunks or [make_chunk(1), make_chunk(2)]
 
-    def fake_call_groq(model_name, messages, max_tokens, temperature=0.0):
+    def fake_call_claude(model_name, messages, max_tokens, temperature=0.0):
         calls["answer_messages"], calls["answer_model"] = messages, model_name
         return answer
 
     monkeypatch.setattr(llm, "search_chunks", fake_search)
-    monkeypatch.setattr(llm, "call_groq", fake_call_groq)
+    monkeypatch.setattr(llm, "call_claude", fake_call_claude)
     return calls
 
 

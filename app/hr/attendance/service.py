@@ -396,6 +396,27 @@ def check_out(employee, client_ip):
     return get_today_state(employee)
 
 
+# ------------------------------------------------------------------ the 7:30pm "do you want to check out" chat prompt
+CHECKOUT_PROMPT_ACTION = "checkout_prompt"       # a pending_actions.action_type - see hr/attendance/checkout_reminder.py
+
+
+def find_checkout_candidates(today):
+    """Everyone who checked in today and has not checked out yet, and who has real attendance of their own
+    (not the CEO, the CTO or the super admin - see require_attendance). Used by the 7:30pm reminder job."""
+    people = [person for person in attendance_store.list_people()
+              if get_access_level(person) not in (None, LEVEL_SUPERADMIN)]
+    if not people:
+        return []
+    rows_by_employee_id = {row["employee_id"]: row for row in attendance_store.list_attendance(
+        [person["id"] for person in people], today.isoformat(), today.isoformat())}
+    candidates = []
+    for person in people:
+        row = rows_by_employee_id.get(person["id"])
+        if row and row["check_in_at"] and not row["check_out_at"]:
+            candidates.append(person)
+    return candidates
+
+
 # ------------------------------------------------------------------ calendars (mine, one person, a whole day of the team)
 def parse_month(month_text):
     """'2026-11' (or nothing = this month) -> (first day, last day up to today). A future month is refused."""

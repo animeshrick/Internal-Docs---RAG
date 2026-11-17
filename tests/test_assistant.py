@@ -1,15 +1,18 @@
-"""Tests for app/assistant.py. Groq (router and answer) and the document search are replaced by fakes."""
+"""Tests for app/assistant.py. Claude (router and answer) and the document search are replaced by fakes."""
 import json
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
 from app.rag.answer import assistant as assistant
+from app.hr.attendance import service as attendance_service
 from app.hr.leave import service as leave_service
+from app.hr.superadmin import service as superadmin_service
 from fakes import FakeDatabase
 
 TODAY = date(2026, 11, 7)
 EMPLOYEE = {"employee_id": 3, "emp_id": "EMP003", "role": "employee"}
+SUPERADMIN = {"employee_id": 8, "emp_id": "EMP008", "role": "superadmin"}
 
 
 def tool_message(name, **arguments):
@@ -21,7 +24,7 @@ def chat(monkeypatch):
     """Returns a function: chat("message", router_reply) sends one message with the router answering router_reply."""
     monkeypatch.setattr(leave_service, "get_today", lambda: TODAY)
     database = FakeDatabase().install(monkeypatch)
-    state = {"router_reply": {"content": "Hello!"}, "groq_messages": []}
+    state = {"router_reply": {"content": "Hello!"}, "claude_messages": []}
 
     monkeypatch.setattr(assistant, "call_router", lambda question, history=None: state["router_reply"])
     monkeypatch.setattr(assistant, "answer_question", lambda question: {
@@ -31,10 +34,10 @@ def chat(monkeypatch):
         "chunk_id": "c1", "doc_id": "HR-LEAVE-001", "title": "Leave Policy", "section": "2", "version": "1", "effective_date": None,
         "text": "Casual leave is 8 days per year."}])
 
-    def fake_call_groq(model, messages, max_tokens, temperature=0.0):
-        state["groq_messages"].append(messages[-1]["content"])
+    def fake_call_claude(model, messages, max_tokens, temperature=0.0, system=None):
+        state["claude_messages"].append(messages[-1]["content"])
         return "You have 3 casual days left out of 8 [1]."
-    monkeypatch.setattr(assistant, "call_groq", fake_call_groq)
+    monkeypatch.setattr(assistant, "call_claude", fake_call_claude)
 
     def send(message, router_reply=None, employee=EMPLOYEE):
         if router_reply is not None:
@@ -62,7 +65,7 @@ def test_the_balance_mixes_my_numbers_with_the_policy(chat):
     chat.database.add_leave(3, "casual", "2026-06-01", "2026-06-04", 4, status="approved")
     chat.database.add_leave(3, "casual", "2026-04-06", "2026-04-06", 1, status="pending")
     reply = chat("how many casual leaves do I have left?", tool_message("get_leave_balance"))
-    data_sent_to_the_model = chat.state["groq_messages"][-1]
+    data_sent_to_the_model = chat.state["claude_messages"][-1]
     assert "Casual Leave: 8 days per year, used 4, waiting for approval 1, remaining 3." in data_sent_to_the_model
     # WFH and maternity are per_year/per_request but excluded from the TOTAL: 8+12=20 allowed, 3+12=15 remaining.
     assert ("TOTAL leave days left: 15 of 20 (Casual Leave + Sick Leave). "
@@ -76,7 +79,7 @@ def test_the_balance_mixes_my_numbers_with_the_policy(chat):
 def test_my_pending_leaves_are_listed(chat):
     chat.database.add_leave(3, "sick", "2026-11-12", "2026-11-12", 1, status="pending")
     chat("which leaves are pending?", tool_message("list_my_leaves", status="pending"))
-    assert "Sick Leave on Thu, 12 Nov 2026 (full day) - status: pending" in chat.state["groq_messages"][-1]
+    assert "Sick Leave on Thu, 12 Nov 2026 (full day) - status: pending" in chat.state["claude_messages"][-1]
 
 
 def test_the_answer_still_works_when_the_document_search_fails(chat, monkeypatch):
@@ -213,3 +216,142 @@ def test_nobody_can_cancel_someone_elses_leave_through_the_model(chat):
 def test_an_empty_message_is_refused(chat):
     with pytest.raises(ValueError):
         chat("   ")
+
+
+# ------------------------------------------------------------------ the super admin's own chat tools
+def test_pending_approvals_lists_everyone_waiting(chat):
+    chat.database.add_leave(3, "casual", "2026-11-20", "2026-11-20", 1, status="pending")
+    reply = chat("what is waiting for approval?", tool_message("list_pending_approvals"), employee=SUPERADMIN)
+    assert "Ananya Das" in reply["answer"]
+    assert "Reply, for example: Approve #" in reply["answer"]
+
+
+def test_pending_approvals_is_empty_when_nothing_waits(chat):
+    reply = chat("what is waiting for approval?", tool_message("list_pending_approvals"), employee=SUPERADMIN)
+    assert reply["answer"] == "No leave requests are waiting for a decision."
+
+
+def test_pending_approvals_is_refused_to_a_regular_employee(chat):
+    reply = chat("what is waiting for approval?", tool_message("list_pending_approvals"))
+    assert "Only the super admin" in reply["answer"]
+
+
+def test_decide_leave_approves_after_yes(chat):
+    leave = chat.database.add_leave(4, "casual", "2026-11-20", "2026-11-20", 1, status="pending")
+    reply = chat(f"approve #{leave['id']}", tool_message("decide_leave", leave_id=leave["id"], decision="approved", note=""),
+                 employee=SUPERADMIN)
+    assert "Reply yes to confirm" in reply["answer"]
+    assert leave["status"] == "pending"                                       # nothing happens before "yes"
+    reply = chat("yes", employee=SUPERADMIN)
+    assert "was approved" in reply["answer"]
+    assert leave["status"] == "approved"
+
+
+def test_decide_leave_rejecting_needs_a_reason(chat):
+    leave = chat.database.add_leave(4, "casual", "2026-11-20", "2026-11-20", 1, status="pending")
+    reply = chat(f"reject #{leave['id']}", tool_message("decide_leave", leave_id=leave["id"], decision="rejected", note=""),
+                 employee=SUPERADMIN)
+    assert "tell me the reason" in reply["answer"]
+    assert chat.database.actions == []
+
+
+def test_decide_leave_rejects_with_a_reason_after_yes(chat):
+    leave = chat.database.add_leave(4, "casual", "2026-11-20", "2026-11-20", 1, status="pending")
+    chat(f"reject #{leave['id']}", tool_message("decide_leave", leave_id=leave["id"], decision="rejected", note="team needs cover"),
+         employee=SUPERADMIN)
+    reply = chat("yes", employee=SUPERADMIN)
+    assert "was rejected" in reply["answer"]
+    assert leave["status"] == "rejected"
+
+
+def test_decide_leave_is_refused_to_a_regular_employee(chat):
+    leave = chat.database.add_leave(4, "casual", "2026-11-20", "2026-11-20", 1, status="pending")
+    reply = chat(f"approve #{leave['id']}", tool_message("decide_leave", leave_id=leave["id"], decision="approved", note=""))
+    assert "Only the super admin" in reply["answer"]
+    assert leave["status"] == "pending"
+
+
+def test_apply_leave_for_person_previews_then_saves(chat, monkeypatch):
+    person = {"id": 4, "emp_id": "EMP004", "full_name": "Karan Mehta"}
+    monkeypatch.setattr(superadmin_service, "find_person", lambda text: person if text == "EMP004" else None)
+    calls = []
+    monkeypatch.setattr(superadmin_service, "apply_leave",
+                        lambda *args: calls.append(args) or {"message": "Casual Leave for Karan Mehta (1 days) was saved and approved."})
+    reply = chat("apply casual leave for EMP004 on 10 Nov 2026",
+                tool_message("apply_leave_for_person", person="EMP004", leave_type="casual",
+                             start_date="2026-11-10", end_date="2026-11-10", day_type="full", reason=""),
+                employee=SUPERADMIN)
+    assert "Apply and approve Casual Leave on Tue, 10 Nov 2026" in reply["answer"]
+    assert "Reply yes to confirm" in reply["answer"]
+    reply = chat("yes", employee=SUPERADMIN)
+    assert "was saved and approved" in reply["answer"]
+    assert len(calls) == 1
+
+
+def test_apply_leave_for_person_is_refused_to_a_regular_employee(chat):
+    reply = chat("apply casual leave for EMP004 on 10 Nov 2026",
+                tool_message("apply_leave_for_person", person="EMP004", leave_type="casual",
+                             start_date="2026-11-10", end_date="2026-11-10", day_type="full", reason=""))
+    assert "Only the super admin" in reply["answer"]
+
+
+def test_apply_leave_for_person_with_an_unknown_person(chat, monkeypatch):
+    monkeypatch.setattr(superadmin_service, "find_person", lambda text: None)
+    reply = chat("apply casual leave for EMP999 on 10 Nov 2026",
+                tool_message("apply_leave_for_person", person="EMP999", leave_type="casual",
+                             start_date="2026-11-10", end_date="2026-11-10", day_type="full", reason=""),
+                employee=SUPERADMIN)
+    assert "could not find an active employee" in reply["answer"]
+
+
+def test_set_attendance_for_person_previews_then_saves(chat, monkeypatch):
+    person = {"id": 4, "emp_id": "EMP004", "full_name": "Karan Mehta"}
+    monkeypatch.setattr(superadmin_service, "find_person", lambda text: person if text == "EMP004" else None)
+    calls = []
+    monkeypatch.setattr(superadmin_service, "mark_attendance",
+                        lambda *args: calls.append(args) or {"message": "Attendance of Karan Mehta on 2026-11-10 was saved."})
+    reply = chat("mark EMP004 present on 10 Nov 2026, check-in 09:15",
+                tool_message("set_attendance_for_person", person="EMP004", work_date="2026-11-10",
+                             check_in_time="09:15", check_out_time=""),
+                employee=SUPERADMIN)
+    assert "Set check-in 09:15 for Karan Mehta (EMP004) on 2026-11-10" in reply["answer"]
+    reply = chat("yes", employee=SUPERADMIN)
+    assert "was saved" in reply["answer"]
+    assert len(calls) == 1
+
+
+def test_set_attendance_for_person_needs_a_time(chat, monkeypatch):
+    monkeypatch.setattr(superadmin_service, "find_person", lambda text: {"id": 4, "emp_id": "EMP004", "full_name": "Karan Mehta"})
+    reply = chat("mark EMP004 present",
+                tool_message("set_attendance_for_person", person="EMP004", work_date="", check_in_time="", check_out_time=""),
+                employee=SUPERADMIN)
+    assert "the check-in time, the check-out time, or both" in reply["answer"]
+
+
+def test_set_attendance_for_person_is_refused_to_a_regular_employee(chat):
+    reply = chat("mark EMP004 present, check-in 09:15",
+                tool_message("set_attendance_for_person", person="EMP004", work_date="", check_in_time="09:15", check_out_time=""))
+    assert "Only the super admin" in reply["answer"]
+
+
+# ------------------------------------------------------------------ the 7:30pm checkout prompt
+def test_checkout_prompt_checks_out_on_yes(chat, monkeypatch):
+    chat.database.create_pending_action(3, attendance_service.CHECKOUT_PROMPT_ACTION, {"work_date": "2026-11-07"},
+                                        "Do you want to check out now?")
+    monkeypatch.setattr(attendance_service, "read_settings", lambda: {"fake": True})
+    monkeypatch.setattr(attendance_service, "get_now", lambda: datetime(2026, 11, 7, 13, 0, tzinfo=timezone.utc))
+    write_day_calls = []
+    monkeypatch.setattr(attendance_service, "write_day",
+                        lambda *args: write_day_calls.append(args) or {"check_out_at": "2026-11-07T13:00:00+00:00"})
+    monkeypatch.setattr(attendance_service, "format_clock", lambda value: "18:30")
+    reply = chat("yes")
+    assert "checked out for today at 18:30" in reply["answer"]
+    assert write_day_calls[0][0] == 3                                         # employee_row["id"]
+    assert write_day_calls[0][1] == "2026-11-07"                              # the work_date from the prompt's payload
+
+
+def test_checkout_prompt_no_changes_nothing(chat):
+    chat.database.create_pending_action(3, attendance_service.CHECKOUT_PROMPT_ACTION, {"work_date": "2026-11-07"},
+                                        "Do you want to check out now?")
+    reply = chat("no")
+    assert "Nothing was changed" in reply["answer"]

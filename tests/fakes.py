@@ -139,11 +139,11 @@ class FakeDatabase:
         action.update(fields)
         return action
 
-    def create_pending_action(self, employee_id, action_type, payload, summary):
+    def create_pending_action(self, employee_id, action_type, payload, summary, expires_at=None):
         old = self.get_waiting_action(employee_id)
         if old:
             old["status"] = "cancelled"
-        expires = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+        expires = expires_at or (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
         action = {"id": self.new_id(), "employee_id": employee_id, "action_type": action_type, "payload": payload,
                   "summary": summary, "status": "waiting", "expires_at": expires}
         self.actions.append(action)

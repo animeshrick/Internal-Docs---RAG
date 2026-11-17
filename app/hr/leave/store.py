@@ -157,13 +157,17 @@ def update_action(action_id, fields, expected_status="waiting"):
     return rows[0] if rows else None
 
 
-def create_pending_action(employee_id, action_type, payload, summary):
-    """A new request replaces the old waiting one (the database allows only one waiting action per employee)."""
+def create_pending_action(employee_id, action_type, payload, summary, expires_at=None):
+    """A new request replaces the old waiting one (the database allows only one waiting action per employee).
+    expires_at (an ISO timestamp) overrides the database's default 10-minute expiry - used by actions that
+    are fine to leave unanswered for longer, such as the 7:30pm checkout prompt (see attendance/checkout_reminder.py)."""
     old_action = get_waiting_action(employee_id)
     if old_action:
         update_action(old_action["id"], {"status": "cancelled"})
+    fields = {"employee_id": employee_id, "action_type": action_type, "payload": payload, "summary": summary}
+    if expires_at:
+        fields["expires_at"] = expires_at
     response = requests.post(get_table_url(PENDING_ACTIONS_TABLE_NAME), headers=build_headers({"Prefer": "return=representation"}),
-                             json={"employee_id": employee_id, "action_type": action_type, "payload": payload, "summary": summary},
-                             timeout=REQUEST_TIMEOUT_SECONDS)
+                             json=fields, timeout=REQUEST_TIMEOUT_SECONDS)
     check_response(response, "Saving the pending action")
     return response.json()[0]

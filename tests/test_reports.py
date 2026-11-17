@@ -121,15 +121,15 @@ def test_build_daily_report_text_groups_people_by_status(database):
 
     text = reports_service.build_daily_report_text(date(2026, 11, 12))
     assert "Daily HR Report - Thu, 12 Nov 2026" in text
-    assert "Attendance (5 tracked)" in text        # Hana, Pam, Ann, Sal, Harry - not the CEO/CTO/super admin
+    assert "*Attendance (5 tracked)*" in text        # Hana, Pam, Ann, Sal, Harry - not the CEO/CTO/super admin
     assert "Present: 2" in text
     assert "Late: Hana HR" in text
     assert "Not checked in / absent: Sal Sales" in text
-    assert "On leave today (1)" in text
+    assert "*On leave today (1)*" in text
     assert "- Harry HR - Casual Leave (full day)" in text
-    assert "Work From Home today (1)" in text
+    assert "*Work From Home today (1)*" in text
     assert "- Pam PM" in text
-    assert "Check-in times (2)" in text
+    assert "*Check-in times (2)*" in text
     assert "- Ann Employee - 10:05" in text
     assert "- Hana HR - 10:50" in text
     assert "This is an automated report" not in text     # that's the AiSensy template's static Footer, not generated here
@@ -137,14 +137,55 @@ def test_build_daily_report_text_groups_people_by_status(database):
 
 def test_build_daily_report_text_with_nobody_on_leave_or_wfh(database):
     text = reports_service.build_daily_report_text(date(2026, 11, 12))
-    assert "On leave today (0)" in text and "- Nobody" in text
-    assert "Work From Home today (0)" in text
-    assert "Check-in times (0)" in text and "- Nobody has checked in yet" in text
+    assert "*On leave today (0)*" in text and "- Nobody" in text
+    assert "*Work From Home today (0)*" in text
+    assert "*Check-in times (0)*" in text and "- Nobody has checked in yet" in text
 
 
 def test_the_report_notes_a_weekend_or_a_company_holiday(database):
     assert "Today is a weekend." in reports_service.build_daily_report_text(date(2026, 11, 14))     # a Saturday
     assert "Today is a company holiday (Christmas)." in reports_service.build_daily_report_text(date(2026, 12, 25))
+
+
+# ------------------------------------------------------------------ the report fields (daily_hr_report_v2 - 8 separate AiSensy template variables)
+def test_build_daily_report_fields_groups_people_by_status(database):
+    # Same scenario as test_build_daily_report_text_groups_people_by_status above.
+    database.set_time("10:05", "2026-11-12")
+    main_service = reports_service.attendance_service
+    main_service.check_in(EMPLOYEE, LOCAL_IP)
+    database.set_time("19:00", "2026-11-12")
+    main_service.check_out(EMPLOYEE, LOCAL_IP)
+
+    database.set_time("10:50", "2026-11-12")
+    main_service.check_in(HR, LOCAL_IP)
+    database.set_time("19:00", "2026-11-12")
+    main_service.check_out(HR, LOCAL_IP)
+
+    database.leaves.append({"employee_id": 7, "leave_type": "casual", "start_date": "2026-11-12", "end_date": "2026-11-12", "day_type": "full"})
+    database.leaves.append({"employee_id": 2, "leave_type": "wfh", "start_date": "2026-11-12", "end_date": "2026-11-12", "day_type": "full"})
+
+    fields = reports_service.build_daily_report_fields(date(2026, 11, 12))
+    assert fields == [
+        "Thu, 12 Nov 2026",
+        "5",                      # Hana, Pam, Ann, Sal, Harry tracked - not the CEO/CTO/super admin
+        "2",                      # present: Ann, Hana
+        "Hana HR",                # late
+        "Sal Sales",              # not checked in / absent
+        "Harry HR (Casual Leave, full day)",
+        "Pam PM",
+        "Hana HR 10:50, Ann Employee 10:05",
+    ]
+
+
+def test_build_daily_report_fields_with_nobody_on_leave_or_wfh(database):
+    # Nothing recorded for anyone today, so everyone tracked defaults to "not checked in" (absent)
+    # - that is what fields[4] covers. Nobody is late (no check-in to be late against), nobody is
+    # on leave or WFH, and nobody has a check-in time yet - that is what this test actually checks.
+    fields = reports_service.build_daily_report_fields(date(2026, 11, 12))
+    assert fields[3] == "none"                        # late
+    assert fields[5] == "Nobody"                       # on leave
+    assert fields[6] == "Nobody"                       # WFH
+    assert fields[7] == "Nobody has checked in yet"    # check-in times
 
 
 # ------------------------------------------------------------------ AiSensy
@@ -195,7 +236,7 @@ def test_sending_raises_on_a_bad_response(monkeypatch):
 def test_send_daily_report_tries_every_number_even_if_one_fails(monkeypatch, numbers_db):
     numbers_db.append({"id": 1, "label": "A", "phone_number": "+911111111111", "created_at": "x"})
     numbers_db.append({"id": 2, "label": "B", "phone_number": "+922222222222", "created_at": "x"})
-    monkeypatch.setattr(reports_service, "build_daily_report_text", lambda for_date=None: "REPORT")
+    monkeypatch.setattr(reports_service, "build_daily_report_fields", lambda for_date=None: ["REPORT"] * 8)
 
     attempted = []
 
@@ -214,7 +255,7 @@ def test_send_daily_report_tries_every_number_even_if_one_fails(monkeypatch, num
 
 
 def test_send_daily_report_with_no_numbers_configured(monkeypatch, numbers_db):
-    monkeypatch.setattr(reports_service, "build_daily_report_text", lambda for_date=None: "REPORT")
+    monkeypatch.setattr(reports_service, "build_daily_report_fields", lambda for_date=None: ["REPORT"] * 8)
     assert reports_service.send_daily_report() == []
 
 

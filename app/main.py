@@ -140,6 +140,7 @@ from app.hr.payroll import service as payroll_service
 from app.hr.payroll import store as payroll_store
 from app.hr.reports import service as reports_service
 from app.hr.reports import scheduler as reports_scheduler
+from app.hr.attendance import checkout_reminder
 from app.files import storage as storage_store
 from app.rag.answer.assistant import answer_chat_message
 from app.chat import store as chat_store
@@ -158,8 +159,10 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     reports_scheduler.start()
+    checkout_reminder.start()
     yield
     reports_scheduler.stop()
+    checkout_reminder.stop()
 
 
 app = FastAPI(title="HR Policy Chatbot", lifespan=lifespan)
