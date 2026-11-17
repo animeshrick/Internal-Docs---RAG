@@ -23,3 +23,6 @@ python-dotenv==1.2.4
 # only used by the ingestion pipeline (app/rag/ingest/parsing.py).
 # Drop this line and the lxml it pulls in if the image only ever serves the API.
 python-docx==1.2.0
+
+APScheduler==3.11.3
+reportlab==4.2.5
