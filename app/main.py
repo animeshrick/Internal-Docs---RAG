@@ -11,7 +11,8 @@ Then open http://127.0.0.1:8000/docs to try it in the browser.
 
 Endpoints:
     GET  /health                          open to everyone
-    GET  /system/downtime                 open to everyone: which pages are down for planned maintenance
+    GET  /system/downtime                 open to everyone: which pages are down for planned maintenance,
+                                          plus the emergency broadcast shown at the top of every page
     POST /login                           emp_id + password -> token
     POST /change-password                 any logged-in employee (also the first step with a temporary password)
     GET  /government-id                   my own government ID (Aadhaar / PAN), number masked
@@ -309,8 +310,13 @@ def health_check():
 def system_downtime_status():
     """Public, no login needed: which pages are down for planned maintenance right now (see
     DOWNTIME_PAGES in app/core/downtime.py). The frontend polls this to show a maintenance
-    screen on the matching pages instead of waiting for each of their requests to fail."""
-    return {"down_pages": sorted(downtime.get_down_pages())}
+    screen on the matching pages instead of waiting for each of their requests to fail.
+
+    It also carries EMERGENCY_BROADCAST, the short notice the website shows at the top of every
+    page (null when there is none). It rides along here because the frontend already polls this
+    endpoint once a minute and it needs no login, so the notice also reaches the login page."""
+    return {"down_pages": sorted(downtime.get_down_pages()),
+            "emergency_broadcast": downtime.get_emergency_broadcast()}
 
 
 @app.post("/login", response_model=LoginResponse)

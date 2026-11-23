@@ -24,8 +24,14 @@ employee from finishing that mandatory step either.
 
 Unknown keys in the setting (a typo, for example) are silently dropped rather than rejected, so
 a bad value can never accidentally take down more than intended.
+
+The same endpoint also carries EMERGENCY_BROADCAST, a short message the website shows at the top
+of every page. See get_emergency_broadcast at the bottom of this file.
 """
+from dotenv import dotenv_values
+
 from app.core.config import get_setting
+from app.core.paths import PROJECT_ROOT
 
 PAGE_KEYS = {
     "home", "chat", "documents", "leave_and_wfh", "payslips", "approvals",
@@ -68,3 +74,47 @@ def get_down_pages():
     raw = get_setting("DOWNTIME_PAGES", "") or ""
     keys = {item.strip() for item in raw.split(",") if item.strip()}
     return keys & PAGE_KEYS
+
+
+# ------------------------------------------------------------------ the emergency broadcast
+# A short message shown at the top of every page of the website, login page included. It is read
+# from EMERGENCY_BROADCAST in the .env file and sent out by GET /system/downtime, which the
+# frontend already polls once a minute. So changing the text needs a restart of this server and
+# no rebuild of the frontend, and it reaches people who are already logged in within the minute.
+#
+# Unset or empty means no banner. This is only a notice: it blocks nothing, unlike DOWNTIME_PAGES.
+EMERGENCY_BROADCAST_SETTING_NAME = "EMERGENCY_BROADCAST"
+MAXIMUM_BROADCAST_LENGTH = 300      # a banner, not an article: longer text is cut off
+
+
+def read_broadcast_from_env_file():
+    """
+    The message as the .env file has it RIGHT NOW, or None when the file has no entry for it.
+
+    The .env file is normally read once, when the server starts, so a change to it would need a
+    restart to take effect. An emergency notice is the one setting where that is the wrong
+    behaviour: it has to be possible to put a message up, or take it down, on a server that is
+    already running and serving people. So this one value is read from the file on every call.
+
+    That is cheap: the frontend polls GET /system/downtime once a minute per open page, and this
+    reads one small file. dotenv_values parses the file without touching the process environment,
+    so nothing else in the app is affected by what it finds.
+    """
+    env_file_path = PROJECT_ROOT / ".env"
+    if not env_file_path.exists():
+        return None
+    return dotenv_values(env_file_path).get(EMERGENCY_BROADCAST_SETTING_NAME)
+
+
+def get_emergency_broadcast():
+    """
+    The message to show at the top of every page, or None when there is nothing to say.
+
+    The .env file wins when it has the setting, so editing that file changes the notice straight
+    away. Otherwise the process environment is used, which is how it would be set on a host that
+    passes settings in directly instead of using a file.
+    """
+    from_file = read_broadcast_from_env_file()
+    raw_message = from_file if from_file is not None else get_setting(EMERGENCY_BROADCAST_SETTING_NAME)
+    message = (raw_message or "").strip()
+    return message[:MAXIMUM_BROADCAST_LENGTH] if message else None
