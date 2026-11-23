@@ -26,3 +26,8 @@ python-docx==1.2.0
 
 APScheduler==3.11.3
 reportlab==4.2.5
+
+# government ID numbers are encrypted before they reach Supabase
+# (app/core/encryption.py uses cryptography.fernet). cffi and pycparser come
+# in automatically as its dependencies, so they are not pinned here.
+cryptography==50.0.2
