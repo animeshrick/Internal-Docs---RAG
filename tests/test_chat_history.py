@@ -11,7 +11,7 @@ from app import main
 
 client = TestClient(main.app)
 HEADERS = {"Authorization": "Bearer any-token"}
-EMPLOYEE = {"employee_id": 4, "emp_id": "EMP004", "full_name": "Karan Mehta", "dept": "IT", "role": "employee", "must_change_password": False}
+EMPLOYEE = {"employee_id": 4, "emp_id": "EMP004", "full_name": "Karan Mehta", "dept": "IT", "role": "employee", "must_change_password": False, "has_government_id": True}
 
 
 @pytest.fixture(autouse=True)

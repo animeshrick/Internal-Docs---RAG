@@ -14,6 +14,7 @@ from app.core.supabase import build_headers, check_response, REQUEST_TIMEOUT_SEC
 LEAVE_DOCUMENTS_BUCKET = "leave-documents"
 SHARED_DOCUMENTS_BUCKET = "shared-documents"
 DIRECT_MESSAGE_ATTACHMENTS_BUCKET = "direct-message-attachments"
+GOVERNMENT_IDS_BUCKET = "government-ids"          # Aadhaar / PAN images; only the super admin ever gets a link
 SIGNED_LINK_SECONDS = 300
 
 

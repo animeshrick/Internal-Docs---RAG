@@ -267,7 +267,7 @@ HEADERS = {"Authorization": "Bearer t"}
 @pytest.fixture
 def api(monkeypatch, numbers_db):
     class Holder:
-        employee = dict(SUPERADMIN, must_change_password=False)
+        employee = dict(SUPERADMIN, must_change_password=False, has_government_id=True)
     holder = Holder()
     monkeypatch.setattr(main.auth, "load_employee_from_token", lambda token: holder.employee)
     return holder
@@ -290,7 +290,7 @@ def test_endpoints_list_add_and_remove_a_number(api):
 
 
 def test_only_the_super_admin_may_use_the_endpoints(api):
-    api.employee = dict(HR, must_change_password=False)
+    api.employee = dict(HR, must_change_password=False, has_government_id=True)
     assert client.get("/superadmin/whatsapp-numbers", headers=HEADERS).status_code == 403
     assert client.post("/superadmin/whatsapp-numbers", json={"label": "X", "phone_number": "+919876543210"}, headers=HEADERS).status_code == 403
     assert client.delete("/superadmin/whatsapp-numbers/1", headers=HEADERS).status_code == 403

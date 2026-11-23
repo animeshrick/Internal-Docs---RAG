@@ -16,11 +16,56 @@ class LoginResponse(BaseModel):
     access_token: str
     token_type: str
     must_change_password: bool
+    # The second one-time step: submit a government ID (Aadhaar or PAN) before the rest of the app opens.
+    must_submit_government_id: bool = False
     role: str
     full_name: str
     emp_id: str
     # What the website shows: "hr", "pm", "employee", or "none" (the CEO and the CTO have no attendance section).
     attendance_access: str = "none"
+
+
+class GovernmentIdStatusResponse(BaseModel):
+    """The employee's own government ID. The number is only ever masked ("Aadhaar ending 1234")."""
+
+    submitted: bool
+    required: bool
+    id_type: str | None = None
+    masked_number: str | None = None
+    submitted_at: str | None = None
+
+
+class GovernmentIdSavedResponse(BaseModel):
+    submitted: bool
+    id_type: str
+    masked_number: str
+    message: str
+
+
+class SuperadminGovernmentIdResponse(BaseModel):
+    """Super admin only: one employee's ID with the FULL number. Every read is written to the audit log."""
+
+    emp_id: str
+    full_name: str
+    id_type: str
+    id_number: str
+    masked_number: str
+    submitted_at: str
+    front_image_path: str
+    back_image_path: str | None = None
+
+
+class SuperadminGovernmentIdListRow(BaseModel):
+    """One line of the super admin's overview: who has submitted and who has not."""
+
+    emp_id: str
+    full_name: str
+    dept: str | None = None
+    role: str | None = None
+    submitted: bool
+    id_type: str | None = None
+    masked_number: str | None = None
+    submitted_at: str | None = None
 
 
 class CredentialsResponse(BaseModel):

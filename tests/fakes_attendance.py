@@ -31,7 +31,7 @@ def login_of(person_id):
     """The dictionary a logged-in person has (what load_employee_from_token returns)."""
     emp_id, full_name, dept, role, is_confidential = PEOPLE[person_id]
     return {"employee_id": person_id, "emp_id": emp_id, "full_name": full_name, "dept": dept, "role": role,
-            "is_confidential": is_confidential, "must_change_password": False}
+            "is_confidential": is_confidential, "must_change_password": False, "has_government_id": True}
 
 
 def row_of(person_id):

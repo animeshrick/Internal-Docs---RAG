@@ -188,7 +188,7 @@ HEADERS = {"Authorization": "Bearer t"}
 @pytest.fixture
 def api(monkeypatch):
     class Holder:
-        employee = {"employee_id": 1, "emp_id": "EMP001", "full_name": "Priya", "dept": "HR", "role": "hr", "must_change_password": False}
+        employee = {"employee_id": 1, "emp_id": "EMP001", "full_name": "Priya", "dept": "HR", "role": "hr", "must_change_password": False, "has_government_id": True}
         uploads = []
         saved = []
     holder = Holder()
@@ -314,7 +314,7 @@ def test_get_or_build_payslip_link_refuses_when_salary_is_not_recorded(monkeypat
 
 # ------------------------------------------------------------------ self-serve endpoints
 def test_my_payslip_months_endpoint(api, monkeypatch):
-    api.employee = {"employee_id": 3, "emp_id": "EMP003", "full_name": "Ananya Das", "dept": "IT", "role": "employee", "must_change_password": False}
+    api.employee = {"employee_id": 3, "emp_id": "EMP003", "full_name": "Ananya Das", "dept": "IT", "role": "employee", "must_change_password": False, "has_government_id": True}
     monkeypatch.setattr(payroll_service, "get_today", lambda: date(2026, 10, 15))
     monkeypatch.setattr(main.payroll_store, "get_salary_details", lambda employee_id: dict(PEOPLE[3]))
     monkeypatch.setattr(main.payroll_store, "list_payslips", lambda employee_id: PAYSLIPS.get(employee_id, []))
@@ -328,7 +328,7 @@ def test_my_payslip_months_endpoint(api, monkeypatch):
 
 
 def test_my_payslip_years_endpoint(api, monkeypatch):
-    api.employee = {"employee_id": 3, "emp_id": "EMP003", "full_name": "Ananya Das", "dept": "IT", "role": "employee", "must_change_password": False}
+    api.employee = {"employee_id": 3, "emp_id": "EMP003", "full_name": "Ananya Das", "dept": "IT", "role": "employee", "must_change_password": False, "has_government_id": True}
     monkeypatch.setattr(payroll_service, "get_today", lambda: date(2026, 10, 15))
     monkeypatch.setattr(main.payroll_store, "get_salary_details", lambda employee_id: dict(PEOPLE[3]))
     response = client.get("/payroll/payslips/mine/years", headers=HEADERS)
@@ -337,7 +337,7 @@ def test_my_payslip_years_endpoint(api, monkeypatch):
 
 
 def test_my_payslip_download_url_endpoint(api, monkeypatch):
-    api.employee = {"employee_id": 3, "emp_id": "EMP003", "full_name": "Ananya Das", "dept": "IT", "role": "employee", "must_change_password": False}
+    api.employee = {"employee_id": 3, "emp_id": "EMP003", "full_name": "Ananya Das", "dept": "IT", "role": "employee", "must_change_password": False, "has_government_id": True}
     monkeypatch.setattr(payroll_service, "get_today", lambda: date(2026, 10, 15))
     monkeypatch.setattr(main.payroll_store, "get_salary_details", lambda employee_id: dict(PEOPLE[3]))
     monkeypatch.setattr(main.storage_store, "create_signed_link", lambda bucket, path: f"https://signed.example/{bucket}/{path}")
@@ -347,7 +347,7 @@ def test_my_payslip_download_url_endpoint(api, monkeypatch):
 
 
 def test_my_payslip_download_url_endpoint_generates_a_missing_month(api, monkeypatch):
-    api.employee = {"employee_id": 3, "emp_id": "EMP003", "full_name": "Ananya Das", "dept": "IT", "role": "employee", "must_change_password": False}
+    api.employee = {"employee_id": 3, "emp_id": "EMP003", "full_name": "Ananya Das", "dept": "IT", "role": "employee", "must_change_password": False, "has_government_id": True}
     monkeypatch.setattr(payroll_service, "get_today", lambda: date(2026, 11, 5))
     monkeypatch.setattr(main.payroll_store, "get_salary_details", lambda employee_id: dict(PEOPLE[3]))
     monkeypatch.setattr(payroll_pdf, "build_payslip_pdf", lambda *a, **k: b"%PDF-FAKE")
@@ -359,7 +359,7 @@ def test_my_payslip_download_url_endpoint_generates_a_missing_month(api, monkeyp
 
 
 def test_my_payslip_download_url_endpoint_refuses_outside_employment(api, monkeypatch):
-    api.employee = {"employee_id": 3, "emp_id": "EMP003", "full_name": "Ananya Das", "dept": "IT", "role": "employee", "must_change_password": False}
+    api.employee = {"employee_id": 3, "emp_id": "EMP003", "full_name": "Ananya Das", "dept": "IT", "role": "employee", "must_change_password": False, "has_government_id": True}
     monkeypatch.setattr(payroll_service, "get_today", lambda: date(2026, 11, 5))
     monkeypatch.setattr(main.payroll_store, "get_salary_details", lambda employee_id: dict(PEOPLE[3]))
     response = client.get("/payroll/payslips/mine/2026-01/download-url", headers=HEADERS)

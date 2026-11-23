@@ -14,9 +14,9 @@ client = TestClient(main.app)
 HEADERS = {"Authorization": "Bearer any-token"}
 
 
-def make_employee(employee_id=3, role="employee", must_change_password=False):
+def make_employee(employee_id=3, role="employee", must_change_password=False, has_government_id=True):
     return {"employee_id": employee_id, "emp_id": f"EMP00{employee_id}", "full_name": "Test", "dept": "IT",
-            "role": role, "must_change_password": must_change_password}
+            "role": role, "must_change_password": must_change_password, "has_government_id": has_government_id}
 
 
 @pytest.fixture

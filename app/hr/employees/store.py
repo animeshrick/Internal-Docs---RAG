@@ -14,8 +14,24 @@ AUTH_TABLE_NAME = "employee_auth"
 # One request returns the employee row together with its login row (PostgREST calls this "embedding").
 EMPLOYEE_WITH_LOGIN_COLUMNS = (
     "id,emp_id,full_name,email,dept,dob,is_active,is_confidential,"
-    "employee_auth(password_hash,role,must_change_password,failed_login_attempts,locked_until,password_changed_at)"
+    "employee_auth(password_hash,role,must_change_password,failed_login_attempts,locked_until,password_changed_at),"
+    # Only "is there a row?" - the government ID number itself is never read here. It is embedded in this
+    # same request so that checking the token does not cost a second trip to the database.
+    "employee_government_id(id_type,id_number_last4,submitted_at)"
 )
+
+
+def take_one_embedded_row(row, embedded_table_name):
+    """
+    Pull an embedded row out of a PostgREST answer.
+
+    Supabase sends an embedded row as one dictionary or as a list, depending on the relationship,
+    so this always gives back one dictionary or None, and removes the raw key from the row.
+    """
+    embedded = row.pop(embedded_table_name, None)
+    if isinstance(embedded, list):
+        embedded = embedded[0] if embedded else None
+    return embedded
 
 
 def find_employee_with_login(emp_id=None, employee_id=None):
@@ -42,11 +58,8 @@ def find_employee_with_login(emp_id=None, employee_id=None):
         return None
 
     employee = rows[0]
-    login_data = employee.pop("employee_auth", None)
-    # Supabase may send the login row as one dictionary or as a list. We always want one dictionary or None.
-    if isinstance(login_data, list):
-        login_data = login_data[0] if login_data else None
-    employee["login"] = login_data
+    employee["login"] = take_one_embedded_row(employee, "employee_auth")
+    employee["government_id"] = take_one_embedded_row(employee, "employee_government_id")
     return employee
 
 

@@ -6,6 +6,9 @@ How login works:
        made of: date of birth (DDMMYYYY) + emp_id + 8 random characters.
     2. The employee calls authenticate() (the /login endpoint) and receives a token.
     3. With a temporary password the person must call change_password() before using /chat.
+       After that, every employee must also submit their government ID once (Aadhaar or PAN) before
+       the rest of the app opens - see app/hr/government_id. Both one-time steps are reported here
+       as must_change_password and must_submit_government_id.
     4. Every later request sends the token. load_employee_from_token() checks it and reloads the employee
        from the database, so a deactivated employee or a changed role takes effect immediately.
 
@@ -169,6 +172,8 @@ def load_employee_from_token(token):
         "is_confidential": bool(record.get("is_confidential")),      # the CTO: no attendance, and hidden from HR
         "role": record["login"]["role"],
         "must_change_password": record["login"]["must_change_password"],
+        # True when a row exists in employee_government_id. The number itself is not read here.
+        "has_government_id": record.get("government_id") is not None,
     }
 
 
@@ -217,6 +222,9 @@ def authenticate(emp_id, password):
         "access_token": create_access_token(record["id"]),
         "token_type": "bearer",
         "must_change_password": login["must_change_password"],
+        # The second one-time step: the website sends the employee to the Govt ID page when this is true.
+        # The super admin account is not a person, so it is never asked (see hr/government_id/service.py).
+        "must_submit_government_id": login["role"] != "superadmin" and record.get("government_id") is None,
         "role": login["role"],
         "full_name": record["full_name"],
         "emp_id": record["emp_id"],

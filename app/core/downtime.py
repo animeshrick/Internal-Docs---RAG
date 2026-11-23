@@ -18,7 +18,9 @@ Some frontend pages share the exact same backend routes and so share one key her
 A few pages have no backend routes of their own to gate (Home, and Approvals, which only calls
 the leave/attendance routes above); their key only hides the frontend page, with nothing
 enforced on this side. Change password has no key at all - it is never gated, on either side,
-so a forced password change can never be locked out.
+so a forced password change can never be locked out. The government ID routes are not under /me
+for the same reason: they are /government-id, so marking the "me" page down can never stop an
+employee from finishing that mandatory step either.
 
 Unknown keys in the setting (a typo, for example) are silently dropped rather than rejected, so
 a bad value can never accidentally take down more than intended.

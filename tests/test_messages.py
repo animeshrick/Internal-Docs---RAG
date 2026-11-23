@@ -26,7 +26,7 @@ def iso(delta=timedelta()):
 
 def viewer_of(person):
     return {"employee_id": person["id"], "emp_id": person["emp_id"], "full_name": person["full_name"],
-            "dept": person["dept"], "role": person["role"], "is_confidential": False, "must_change_password": False}
+            "dept": person["dept"], "role": person["role"], "is_confidential": False, "must_change_password": False, "has_government_id": True}
 
 
 class FakeMessagesDatabase:
@@ -293,7 +293,7 @@ def api(database, monkeypatch):
     monkeypatch.setattr(main.auth, "load_employee_from_token", lambda token: {
         "employee_id": holder.employee["employee_id"], "emp_id": holder.employee["emp_id"],
         "full_name": holder.employee["full_name"], "dept": holder.employee["dept"],
-        "is_confidential": False, "role": holder.employee["role"], "must_change_password": False,
+        "is_confidential": False, "role": holder.employee["role"], "must_change_password": False, "has_government_id": True,
     })
     return holder
 

@@ -29,3 +29,7 @@ ALLOWED_SHARED_DOCUMENT_TYPES = (
     "application/vnd.ms-powerpoint",
     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 )
+
+MAXIMUM_GOVERNMENT_ID_NUMBER_LENGTH = 30          # a typed Aadhaar / PAN number, spaces and dashes included
+MAXIMUM_GOVERNMENT_ID_IMAGE_BYTES = 5 * 1024 * 1024
+ALLOWED_GOVERNMENT_ID_IMAGE_TYPES = ("image/png", "image/jpeg", "application/pdf")

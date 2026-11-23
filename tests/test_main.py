@@ -12,10 +12,10 @@ client = TestClient(main.app)
 TOKEN_HEADERS = {"Authorization": "Bearer any-token"}
 
 
-def make_employee(role="employee", must_change_password=False):
+def make_employee(role="employee", must_change_password=False, has_government_id=True):
     return {
         "employee_id": 1, "emp_id": "EMP001", "full_name": "Asha Rao", "dept": "IT",
-        "role": role, "must_change_password": must_change_password,
+        "role": role, "must_change_password": must_change_password, "has_government_id": has_government_id,
     }
 
 

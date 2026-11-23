@@ -13,7 +13,12 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from app.api.limits import MAXIMUM_MESSAGE_BODY_LENGTH, MAXIMUM_PASSWORD_INPUT_LENGTH, MAXIMUM_QUESTION_LENGTH
+from app.api.limits import (
+    MAXIMUM_GOVERNMENT_ID_NUMBER_LENGTH,
+    MAXIMUM_MESSAGE_BODY_LENGTH,
+    MAXIMUM_PASSWORD_INPUT_LENGTH,
+    MAXIMUM_QUESTION_LENGTH,
+)
 
 
 # ------------------------------------------------------------------ logins
@@ -151,3 +156,20 @@ class SendMessageRequest(BaseModel):
     attachment_path: str | None = Field(default=None, max_length=300)
     attachment_filename: str | None = Field(default=None, max_length=120)
     attachment_content_type: str | None = Field(default=None, max_length=100)
+
+
+# ------------------------------------------------------------------ government ID (Aadhaar / PAN)
+class GovernmentIdRequest(BaseModel):
+    """
+    The one-time government ID an employee submits. The images are uploaded first
+    (POST /government-id/images) and their paths are sent here.
+
+    Aadhaar is a two-sided card, so it needs both image paths; PAN is front-only, so back_image_path
+    stays empty. Whether the number itself is a real Aadhaar / PAN number is checked in
+    app/hr/government_id/service.py, not here.
+    """
+
+    id_type: Literal["aadhaar", "pan"]
+    id_number: str = Field(min_length=1, max_length=MAXIMUM_GOVERNMENT_ID_NUMBER_LENGTH)
+    front_image_path: str = Field(min_length=1, max_length=300)
+    back_image_path: str | None = Field(default=None, max_length=300)

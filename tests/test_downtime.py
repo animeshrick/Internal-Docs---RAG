@@ -63,7 +63,7 @@ HEADERS = {"Authorization": "Bearer t"}
 @pytest.fixture
 def api(monkeypatch):
     class Holder:
-        employee = {"employee_id": 8, "emp_id": "EMP008", "full_name": "Sue Super", "dept": "Management", "role": "superadmin", "must_change_password": False}
+        employee = {"employee_id": 8, "emp_id": "EMP008", "full_name": "Sue Super", "dept": "Management", "role": "superadmin", "must_change_password": False, "has_government_id": True}
     holder = Holder()
     monkeypatch.setattr(main.auth, "load_employee_from_token", lambda token: holder.employee)
     return holder

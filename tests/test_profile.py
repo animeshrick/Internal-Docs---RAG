@@ -7,7 +7,7 @@ from app.hr.people import store as people_store
 
 client = TestClient(main.app)
 HEADERS = {"Authorization": "Bearer any-token"}
-EMPLOYEE = {"employee_id": 4, "emp_id": "EMP-1004", "full_name": "Taylor Bennett", "dept": "IT", "role": "employee", "must_change_password": False}
+EMPLOYEE = {"employee_id": 4, "emp_id": "EMP-1004", "full_name": "Taylor Bennett", "dept": "IT", "role": "employee", "must_change_password": False, "has_government_id": True}
 ROW = {"id": 4, "emp_id": "EMP-1004", "full_name": "Taylor Bennett", "email": "t@example.com", "phone": "+91 1", "dept": "IT",
        "dob": "1985-03-09", "doj": "2022-01-03", "gender": "Male", "manager_id": 2, "is_active": True, "is_confidential": False,
        "full_current_address": None, "emergency_ph_no": None, "salary": 99999, "role": "employee"}

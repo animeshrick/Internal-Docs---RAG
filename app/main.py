@@ -14,6 +14,9 @@ Endpoints:
     GET  /system/downtime                 open to everyone: which pages are down for planned maintenance
     POST /login                           emp_id + password -> token
     POST /change-password                 any logged-in employee (also the first step with a temporary password)
+    GET  /government-id                   my own government ID (Aadhaar / PAN), number masked
+    POST /government-id/images            upload one side of my ID (?side=front or back, raw file in the body)
+    POST /government-id                   submit my government ID once: Aadhaar (both sides) or PAN (front only)
     GET  /me                              who am I
     GET  /me/profile                      my own details
     GET  /attendance/today                my check-in state for today
@@ -43,6 +46,10 @@ Endpoints:
     POST /admin/employees                 HR only: add a new employee row (before creating their login)
     POST /register                        HR only: create a login for an existing employee
     POST /reset-password                  HR only: give an employee a new temporary password
+    GET  /superadmin/government-ids       super admin only: who has submitted a government ID and who has not
+    GET  /superadmin/government-ids/{emp_id}   super admin only: one person's ID with the full number (audited)
+    GET  /superadmin/government-ids/{emp_id}/image-url   super admin only: temporary link to one side (?side=front)
+    DELETE /superadmin/government-ids/{emp_id}  super admin only: clear it, so that person submits a new one
     GET  /superadmin/audit-log            super admin only: who was acted on, what, and when
     GET  /superadmin/whatsapp-numbers     super admin only: the numbers receiving the twice-daily report
     POST /superadmin/whatsapp-numbers     super admin only: add a number (label + phone number), max 10
@@ -68,6 +75,9 @@ Endpoints:
     POST /messages/attachments            upload a PDF / PNG / JPG to attach to a message (raw file in the body)
 
 There is no public sign-up. HR creates every login.
+
+Every employee has two one-time steps before the rest of the app opens: change the temporary
+password, then submit a government ID. get_ready_employee below is the gate for both.
 """
 
 import datetime
@@ -87,9 +97,11 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.api.limits import (
     ALLOWED_DOCUMENT_TYPES,
+    ALLOWED_GOVERNMENT_ID_IMAGE_TYPES,
     ALLOWED_MESSAGE_ATTACHMENT_TYPES,
     ALLOWED_SHARED_DOCUMENT_TYPES,
     MAXIMUM_DOCUMENT_BYTES,
+    MAXIMUM_GOVERNMENT_ID_IMAGE_BYTES,
     MAXIMUM_MESSAGE_ATTACHMENT_BYTES,
     MAXIMUM_SHARED_DOCUMENT_BYTES,
 )
@@ -101,6 +113,7 @@ from app.api.requests import (
     CorrectionDecisionRequest,
     CreateEmployeeRequest,
     DocumentAccessDecisionRequest,
+    GovernmentIdRequest,
     LeaveApplyRequest,
     NetworkCheckRequest,
     OfficeNetworkActiveRequest,
@@ -122,8 +135,12 @@ from app.api.responses import (
     ChatHistoryMessage,
     ChatResponse,
     CredentialsResponse,
+    GovernmentIdSavedResponse,
+    GovernmentIdStatusResponse,
     LoginResponse,
     ProfileResponse,
+    SuperadminGovernmentIdListRow,
+    SuperadminGovernmentIdResponse,
 )
 from app.core import downtime
 from app.core import presence
@@ -133,6 +150,7 @@ from app.hr.attendance import service as attendance_service
 from app.hr.documents import service as documents_service
 from app.hr.documents import store as documents_store
 from app.hr.employees import service as employees_service
+from app.hr.government_id import service as government_id_service
 from app.hr.leave import service as leave_service
 from app.hr.leave import store as leave_store
 from app.hr.messages import service as messages_service
@@ -151,6 +169,7 @@ from app.hr.attendance.service import AttendanceError
 from app.hr.leave.service import LeaveError
 from app.hr.payroll.service import PayrollError
 from app.hr.reports.service import ReportError
+from app.hr.government_id.service import GovernmentIdError
 
 setup_logging()                      # the API is an entry point too
 logger = logging.getLogger(__name__)
@@ -221,6 +240,12 @@ def handle_attendance_error(request, error):
     return JSONResponse(status_code=error.status_code, content={"detail": error.message, "code": "attendance_rule"})
 
 
+@app.exception_handler(GovernmentIdError)
+def handle_government_id_error(request, error):
+    """A rejected government ID (wrong number, missing side, already on file) becomes a normal JSON error."""
+    return JSONResponse(status_code=error.status_code, content={"detail": error.message, "code": "government_id"})
+
+
 @app.exception_handler(ReportError)
 def handle_report_error(request, error):
     """A broken WhatsApp-report rule (for example "already 10 numbers") becomes a normal JSON error."""
@@ -237,10 +262,22 @@ def get_current_employee(credentials: HTTPAuthorizationCredentials = Depends(bea
     return employee
 
 
-def get_ready_employee(employee: dict = Depends(get_current_employee)):
-    """A valid token AND the employee has already replaced the temporary password."""
+def get_password_set_employee(employee: dict = Depends(get_current_employee)):
+    """A valid token AND the temporary password has been replaced. Used by the government ID step,
+    which is the only thing an employee may do before that ID is on file."""
     if employee["must_change_password"]:
         raise AuthError(403, "Please change your temporary password first (POST /change-password).", "must_change_password")
+    return employee
+
+
+def get_ready_employee(employee: dict = Depends(get_password_set_employee)):
+    """
+    A valid token AND both one-time steps are done: the temporary password is replaced and the
+    government ID (Aadhaar or PAN) is on file. Every endpoint except login, change-password and
+    the government ID step itself depends on this.
+    """
+    if government_id_service.needs_submission(employee):
+        raise AuthError(403, "Please submit your government ID first (POST /government-id).", "must_submit_government_id")
     return employee
 
 
@@ -291,6 +328,65 @@ def change_password(request: ChangePasswordRequest, employee: dict = Depends(get
     return {"message": "Password changed. Please log in again with your new password."}
 
 
+# ------------------------------------------------------------------ government ID (Aadhaar / PAN)
+# These depend on get_password_set_employee, not get_ready_employee: submitting the ID is the one
+# thing an employee may do while the ID is still missing. Everything else answers 403 until it is in.
+@app.get("/government-id", response_model=GovernmentIdStatusResponse)
+def read_my_government_id(employee: dict = Depends(get_password_set_employee)):
+    """My own government ID. The number is always masked ("Aadhaar ending 1234"), never sent in full."""
+    return government_id_service.describe_own(employee)
+
+
+# async because the file arrives in the request body; the blocking upload runs in a worker thread.
+@app.post("/government-id/images")
+async def upload_government_id_image(request: Request, side: Literal["front", "back"] = Query(),
+                                     employee: dict = Depends(get_password_set_employee)):
+    """
+    Upload one side of my ID. Send the raw file as the body, with Content-Type image/png,
+    image/jpeg or application/pdf. Returns the path to send as front_image_path / back_image_path
+    on POST /government-id - until that call is made the file is attached to nothing.
+
+    The stored name comes from the content type checked here, not from the client, so the type can
+    be trusted later. Aadhaar needs side=front and side=back; PAN needs side=front only.
+    """
+    content_type = (request.headers.get("content-type") or "").split(";")[0].strip().lower()
+    if content_type not in ALLOWED_GOVERNMENT_ID_IMAGE_TYPES:
+        raise GovernmentIdError("Upload a PNG, JPG or PDF of your ID.", 415)
+    declared_size = request.headers.get("content-length", "")
+    if declared_size.isdigit() and int(declared_size) > MAXIMUM_GOVERNMENT_ID_IMAGE_BYTES:
+        raise GovernmentIdError("The file is too large. The limit is 5 MB.", 413)
+
+    file_bytes = await request.body()
+    if not file_bytes:
+        raise GovernmentIdError("The file is empty.", 400)
+    if len(file_bytes) > MAXIMUM_GOVERNMENT_ID_IMAGE_BYTES:
+        raise GovernmentIdError("The file is too large. The limit is 5 MB.", 413)
+
+    image_path = government_id_service.build_image_path(employee["employee_id"], side, content_type)
+    try:
+        await run_in_threadpool(storage_store.upload_file, storage_store.GOVERNMENT_IDS_BUCKET,
+                                image_path, file_bytes, content_type)
+    except Exception:
+        logger.exception("Government ID image upload failed")
+        raise HTTPException(status_code=502, detail="The image could not be saved right now. Please try again.")
+    return {"side": side, "image_path": image_path, "content_type": content_type}
+
+
+@app.post("/government-id", response_model=GovernmentIdSavedResponse)
+def submit_my_government_id(request: GovernmentIdRequest, employee: dict = Depends(get_password_set_employee)):
+    """
+    Submit my government ID once: Aadhaar (front and back images) or PAN (front image only).
+    Upload the images first with POST /government-id/images and send their paths here.
+
+    After this the rest of the app opens in the same session; there is no second login. Nobody can
+    replace their own ID afterwards - only the super admin can clear it.
+    """
+    result = government_id_service.submit(employee, request.id_type, request.id_number,
+                                          request.front_image_path, request.back_image_path)
+    logger.info("Government ID submitted by %s", employee["emp_id"])
+    return result
+
+
 @app.post("/admin/employees")
 def create_employee(request: CreateEmployeeRequest, hr_employee: dict = Depends(require_hr)):
     """HR only. Adds a new employee row. Call /register afterwards to give them a login."""
@@ -317,8 +413,10 @@ def reset_password(request: ResetPasswordRequest, hr_employee: dict = Depends(re
 
 @app.get("/me")
 def read_me(employee: dict = Depends(get_current_employee)):
-    """Who is logged in. Works even before the temporary password is changed."""
+    """Who is logged in. Works even before the temporary password is changed, so a page refresh
+    during either one-time step still knows which step is left."""
     return dict({k: employee[k] for k in ("emp_id", "full_name", "dept", "role", "must_change_password")},
+                must_submit_government_id=government_id_service.needs_submission(employee),
                 attendance_access=attendance_service.get_access_level(employee) or "none")
 
 
@@ -470,6 +568,34 @@ def superadmin_mark_attendance(request: SuperadminAttendanceRequest, admin: dict
     result = superadmin_service.mark_attendance(admin, request.emp_id, request.work_date, request.check_in_time, request.check_out_time)
     logger.info("Super admin %s set attendance of %s on %s", admin["emp_id"], request.emp_id, request.work_date)
     return result
+
+
+@app.get("/superadmin/government-ids", response_model=list[SuperadminGovernmentIdListRow])
+def list_government_ids(admin: dict = Depends(require_superadmin)):
+    """Super admin only. Everyone active, and whether their government ID is on file (number masked)."""
+    return government_id_service.list_submission_states(admin)
+
+
+@app.get("/superadmin/government-ids/{emp_id}", response_model=SuperadminGovernmentIdResponse)
+def read_government_id(emp_id: str, admin: dict = Depends(require_superadmin)):
+    """Super admin only. One person's ID with the FULL number. Every read is written to the audit log."""
+    return government_id_service.read_full_id(admin, emp_id)
+
+
+@app.get("/superadmin/government-ids/{emp_id}/image-url")
+def government_id_image_url(emp_id: str, side: Literal["front", "back"] = Query(),
+                            admin: dict = Depends(require_superadmin)):
+    """Super admin only. A temporary link to one side of a stored ID."""
+    image_path = government_id_service.get_image_path(admin, emp_id, side)
+    return {"url": storage_store.create_signed_link(storage_store.GOVERNMENT_IDS_BUCKET, image_path),
+            "valid_for_seconds": storage_store.SIGNED_LINK_SECONDS,
+            "content_type": government_id_service.content_type_for_path(image_path)}
+
+
+@app.delete("/superadmin/government-ids/{emp_id}")
+def clear_government_id(emp_id: str, admin: dict = Depends(require_superadmin)):
+    """Super admin only. Clear one person's ID, so they are asked for a new one at their next login."""
+    return government_id_service.clear(admin, emp_id)
 
 
 @app.get("/superadmin/audit-log")
