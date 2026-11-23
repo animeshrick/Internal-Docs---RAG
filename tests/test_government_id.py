@@ -437,3 +437,33 @@ def test_an_uploaded_image_is_stored_under_the_employees_own_folder(logged_in, m
     assert body["side"] == "back"
     assert body["image_path"].startswith("3/") and body["image_path"].endswith("-back.jpg")
     assert uploads[0][0] == "government-ids"
+
+
+# ------------------------------------------------------------------ the shape of a Supabase answer
+# PostgREST answers 300 Multiple Choices when an embedded table can be reached by more than one
+# foreign key, and the body is an error object instead of the rows. "requests" counts 3xx as ok,
+# so check_response has to look at the status code itself. This is what broke the login the first
+# time the government ID table was created with a second foreign key to employee.
+def test_a_three_hundred_from_supabase_is_an_error_not_data():
+    from app.core import supabase
+
+    class AmbiguousEmbedResponse:
+        status_code = 300
+        ok = True       # what requests reports for any 3xx
+        text = '{"code":"PGRST201","message":"Could not embed because more than one relationship was found"}'
+
+    with pytest.raises(RuntimeError) as raised:
+        supabase.check_response(AmbiguousEmbedResponse(), "Reading the employee")
+    assert "300" in str(raised.value)
+    assert "PGRST201" in str(raised.value)
+
+
+def test_a_normal_success_still_passes():
+    from app.core import supabase
+
+    class OkResponse:
+        status_code = 200
+        ok = True
+        text = "[]"
+
+    supabase.check_response(OkResponse(), "Reading the employee")      # must not raise

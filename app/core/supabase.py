@@ -38,8 +38,16 @@ def get_table_url(table_name):
 
 
 def check_response(response, action_description):
-    """Stop with a readable error if Supabase answered with a failure code."""
-    if not response.ok:
+    """
+    Stop with a readable error if Supabase did not answer with a success code.
+
+    Anything that is not 2xx is a failure here, 3xx included. That matters because PostgREST
+    answers 300 Multiple Choices when an embedded table could be reached by more than one
+    foreign key, and the body is then an error object rather than the rows. requests treats
+    3xx as "ok", so without this check that error object would flow on as if it were data and
+    fail much later with a confusing message.
+    """
+    if not (200 <= response.status_code < 300):
         raise RuntimeError(f"{action_description} failed ({response.status_code}): {response.text[:500]}")
 
 

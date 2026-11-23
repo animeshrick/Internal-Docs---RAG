@@ -26,6 +26,13 @@
 -- One row per employee (employee_id is the primary key), so an employee can never have two IDs
 -- on file. Submitting is a one-time action: the row is only removed when the super admin clears
 -- it, and the employee is then asked again at their next login.
+--
+-- IMPORTANT: employee_id must stay the ONLY foreign key to public.employee in this table. The
+-- backend reads the employee row and this row in one request (PostgREST "embedding"), and that
+-- only works while there is a single relationship between the two tables. A second column
+-- pointing at employee (for example "who cleared this ID") makes the embed ambiguous, and
+-- PostgREST then answers 300 Multiple Choices instead of the row. Who cleared an ID is recorded
+-- in superadmin_audit_log, which is where that belongs.
 create table if not exists public.employee_government_id (
     employee_id bigint primary key references public.employee (id) on delete cascade,
     id_type text not null check (id_type in ('aadhaar', 'pan')),
@@ -36,7 +43,6 @@ create table if not exists public.employee_government_id (
     front_content_type text not null,
     back_content_type text null,
     submitted_at timestamptz not null default now(),
-    cleared_by_id bigint null references public.employee (id) on delete set null,   -- who last cleared a previous ID
     created_at timestamptz not null default now(),
     update_at timestamptz not null default now(),
     -- Aadhaar is a two-sided card, PAN is used front-only. Keep that rule in the database too.
@@ -51,6 +57,10 @@ drop trigger if exists employee_government_id_set_update_at on public.employee_g
 create trigger employee_government_id_set_update_at
     before update on public.employee_government_id
     for each row execute function public.set_update_at();
+
+-- Repairs a table created by an earlier version of this file, which had a second foreign key to
+-- employee (cleared_by_id) and so broke the embed described above. Nothing reads that column.
+alter table public.employee_government_id drop column if exists cleared_by_id;
 
 -- Only our server (secret key) may read this table. The public anon key reads nothing.
 alter table public.employee_government_id enable row level security;
