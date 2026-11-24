@@ -6,6 +6,8 @@ How login works:
        made of: date of birth (DDMMYYYY) + emp_id + 8 random characters.
     2. The employee calls authenticate() (the /login endpoint) and receives a token.
     3. With a temporary password the person must call change_password() before using /chat.
+       A temporary password made by reset_password() stops working after TEMPORARY_PASSWORD_VALID_HOURS
+       hours, so an unused reset does not stay valid for ever.
        After that, every employee must also submit their government ID once (Aadhaar or PAN) before
        the rest of the app opens - see app/hr/government_id. Both one-time steps are reported here
        as must_change_password and must_submit_government_id.
@@ -14,6 +16,8 @@ How login works:
 
 The database is only touched through app/hr/employees/store.py.
 """
+import hashlib
+import logging
 import re
 import secrets
 from datetime import date, datetime, timedelta, timezone
@@ -25,6 +29,8 @@ import jwt
 from app.hr.employees import store as employee_store
 from app.core.config import get_required_setting
 
+logger = logging.getLogger(__name__)
+
 ALLOWED_ROLES = ("employee", "hr", "ceo", "pm", "superadmin")      # pm = project manager: approves leave, but has no HR powers
 HR_LEVEL_ROLES = ("hr", "superadmin")      # a super admin can do everything HR can, and more (see hr/superadmin)
 
@@ -34,6 +40,13 @@ MINIMUM_NEW_PASSWORD_LENGTH = 10
 
 MAXIMUM_FAILED_ATTEMPTS = 5
 LOCK_MINUTES = 15
+
+# How long a temporary password from reset_password() keeps working. After this the employee must ask for
+# a new one. A first login made by create_credentials() has no deadline, so a new joiner is never shut out.
+TEMPORARY_PASSWORD_VALID_HOURS = 24
+
+# How long the employee has to send their new password after their current one was accepted.
+WHATSAPP_TICKET_MINUTES = 10
 
 TOKEN_ALGORITHM = "HS256"
 TOKEN_VALID_MINUTES = 480            # 8 hours
@@ -101,6 +114,14 @@ def build_temporary_password(date_of_birth_text, emp_id):
     date_of_birth = date.fromisoformat(str(date_of_birth_text)[:10])   # accepts "1995-03-07" or a full timestamp
     random_part = "".join(secrets.choice(RANDOM_PART_CHARACTERS) for _ in range(RANDOM_PART_LENGTH))
     return f"{date_of_birth:%d%m%Y}{emp_id}{random_part}"
+
+
+def normalise_whatsapp_number(phone_number):
+    """Twilio sends the sender as "whatsapp:+919876543210"; the employee table stores "+919876543210"."""
+    text = (phone_number or "").strip()
+    if text.lower().startswith("whatsapp:"):
+        text = text[len("whatsapp:"):]
+    return "".join(text.split())
 
 
 def parse_timestamp(timestamp_text):
@@ -194,6 +215,17 @@ def is_locked(login):
     return locked_until is not None and locked_until > get_current_time()
 
 
+def is_temporary_password_expired(login):
+    """
+    True when this login is still on a temporary password and that password is past its deadline.
+    A login with no deadline (a new joiner who has never had a reset) never expires here.
+    """
+    if not login.get("must_change_password"):
+        return False
+    expires_at = parse_timestamp(login.get("temp_password_expires_at"))
+    return expires_at is not None and expires_at <= get_current_time()
+
+
 def authenticate(emp_id, password):
     """Check emp_id and password. Returns the token and a few details, or raises AuthError."""
     emp_id = (emp_id or "").strip()
@@ -214,6 +246,11 @@ def authenticate(emp_id, password):
     if not verify_password(password, login["password_hash"]):
         record_failed_attempt(record["id"], login)
         raise AuthError(401, LOGIN_FAILED_MESSAGE, "invalid_credentials")
+
+    # The password is correct, but it was a temporary one and its deadline has passed.
+    if is_temporary_password_expired(login):
+        raise AuthError(401, "Your temporary password has expired. Please ask for a new one.",
+                        "temporary_password_expired")
 
     if login["failed_login_attempts"] or login["locked_until"]:
         employee_store.update_login(record["id"], {"failed_login_attempts": 0, "locked_until": None})
@@ -259,13 +296,12 @@ def create_credentials(emp_id, role):
     }
 
 
-def reset_password(emp_id):
-    """HR gives an employee a new temporary password (forgotten password, or a locked account)."""
-    record = employee_store.find_employee_with_login(emp_id=emp_id.strip())
-    if record is None:
-        raise AuthError(404, "No employee found with this ID.")
-    if record["login"] is None:
-        raise AuthError(404, "This employee has no login yet. Use register first.")
+def issue_temporary_password(record):
+    """
+    Replace this employee's password with a fresh temporary one and return it in plain text, once.
+    Shared by the HR reset and the WhatsApp reset, so both behave identically: the old password is
+    gone, the lock is cleared, every older token stops working, and the clock starts ticking.
+    """
     if not record["dob"]:
         raise AuthError(400, "This employee has no date of birth saved, so a temporary password cannot be made.")
 
@@ -276,12 +312,151 @@ def reset_password(emp_id):
         "failed_login_attempts": 0,
         "locked_until": None,
         "password_changed_at": get_current_time().isoformat(),
+        "temp_password_expires_at":
+            (get_current_time() + timedelta(hours=TEMPORARY_PASSWORD_VALID_HOURS)).isoformat(),
     })
+    return temporary_password
+
+
+def reset_password(emp_id):
+    """HR gives an employee a new temporary password (forgotten password, or a locked account)."""
+    record = employee_store.find_employee_with_login(emp_id=emp_id.strip())
+    if record is None:
+        raise AuthError(404, "No employee found with this ID.")
+    if record["login"] is None:
+        raise AuthError(404, "This employee has no login yet. Use register first.")
+
+    temporary_password = issue_temporary_password(record)
     return {
         "emp_id": record["emp_id"],
         "full_name": record["full_name"],
         "role": record["login"]["role"],
         "temporary_password": temporary_password,
+    }
+
+
+# ------------------------------------------------------------------ reset over WhatsApp
+# Two turns. find_employee_for_whatsapp() answers "is this number one of ours?" so the bot knows
+# whether to ask for a password at all; reset_password_from_whatsapp() checks that password and
+# hands back a temporary one. Wrong tries count on the same failed_login_attempts / locked_until
+# columns as the website, so attempts on both channels add up and one lock stops both.
+WHATSAPP_UNKNOWN_NUMBER_MESSAGE = "This WhatsApp number is not linked to an employee account."
+WHATSAPP_LOCKED_MESSAGE = f"Too many failed attempts. Please try again in {LOCK_MINUTES} minutes."
+
+
+def phone_suffix_of(phone_number):
+    """The last ten digits of a number, which is what identifies an Indian mobile however it is written."""
+    digits = re.sub(r"[^0-9]", "", normalise_whatsapp_number(phone_number))
+    return digits[-10:] if len(digits) >= 10 else ""
+
+
+def find_employee_for_whatsapp(phone_number):
+    """
+    The employee behind a WhatsApp number, or AuthError when there is nobody usable behind it.
+    The caller always gets the same message, so a stranger cannot learn which numbers we know.
+    The log line says which of the three checks failed, because only we read the log.
+    """
+    suffix = phone_suffix_of(phone_number)
+    if not suffix:
+        logger.info("WhatsApp reset: sender had fewer than ten digits")
+        raise AuthError(404, WHATSAPP_UNKNOWN_NUMBER_MESSAGE, "unknown_number")
+
+    record = employee_store.find_employee_with_login(phone_suffix=suffix)
+    if record is None:
+        logger.info("WhatsApp reset: no employee row with a phone ending %s", suffix[-4:])
+        raise AuthError(404, WHATSAPP_UNKNOWN_NUMBER_MESSAGE, "unknown_number")
+    if record["login"] is None:
+        logger.info("WhatsApp reset: employee %s has no login row yet", record["emp_id"])
+        raise AuthError(404, WHATSAPP_UNKNOWN_NUMBER_MESSAGE, "unknown_number")
+    if not record["is_active"]:
+        logger.info("WhatsApp reset: employee %s is not active", record["emp_id"])
+        raise AuthError(404, WHATSAPP_UNKNOWN_NUMBER_MESSAGE, "unknown_number")
+
+    if is_locked(record["login"]):
+        raise AuthError(429, WHATSAPP_LOCKED_MESSAGE, "account_locked")
+    return record
+
+
+def hash_reset_ticket(ticket):
+    """The ticket is a long random string, so a plain SHA-256 is enough; it is never guessed, only looked up."""
+    return hashlib.sha256((ticket or "").encode("utf-8")).hexdigest()
+
+
+def verify_current_password_from_whatsapp(phone_number, current_password):
+    """
+    Turn 2. The current password is checked, and on success a short-lived ticket is handed back.
+    The ticket is what proves, at turn 3, that this conversation already passed the password check,
+    so the bot never has to hold the password itself between two messages.
+    """
+    record = find_employee_for_whatsapp(phone_number)
+    login = record["login"]
+
+    if not verify_password(current_password, login["password_hash"]):
+        attempts_so_far = login["failed_login_attempts"] + 1
+        record_failed_attempt(record["id"], login)
+        tries_left = MAXIMUM_FAILED_ATTEMPTS - attempts_so_far
+        if tries_left > 0:
+            raise AuthError(401, f"That is not your current password. You have {tries_left} tries left.",
+                            "wrong_current_password")
+        raise AuthError(429, WHATSAPP_LOCKED_MESSAGE, "account_locked")
+
+    ticket = secrets.token_urlsafe(24)
+    employee_store.update_login(record["id"], {
+        "reset_ticket_hash": hash_reset_ticket(ticket),
+        "reset_ticket_expires_at":
+            (get_current_time() + timedelta(minutes=WHATSAPP_TICKET_MINUTES)).isoformat(),
+        "failed_login_attempts": 0,
+        "locked_until": None,
+    })
+    return {
+        "emp_id": record["emp_id"],
+        "full_name": record["full_name"],
+        "reset_ticket": ticket,
+        "valid_minutes": WHATSAPP_TICKET_MINUTES,
+    }
+
+
+def set_temporary_password_from_whatsapp(phone_number, reset_ticket, new_password):
+    """
+    Turn 3. The employee sends the password they want. It is saved as a TEMPORARY password: they
+    still have to set a real one on the website, and it stops working after
+    TEMPORARY_PASSWORD_VALID_HOURS hours. The ticket is spent either way.
+    """
+    record = find_employee_for_whatsapp(phone_number)
+    login = record["login"]
+
+    stored_hash = login.get("reset_ticket_hash")
+    expires_at = parse_timestamp(login.get("reset_ticket_expires_at"))
+    if not stored_hash or expires_at is None or expires_at <= get_current_time():
+        raise AuthError(401, "That request has expired. Send Reset Password again to start over.",
+                        "reset_expired")
+    if not secrets.compare_digest(stored_hash, hash_reset_ticket(reset_ticket)):
+        raise AuthError(401, "That request is not valid. Send Reset Password again to start over.",
+                        "reset_invalid")
+
+    if len(new_password) < MINIMUM_NEW_PASSWORD_LENGTH:
+        raise AuthError(400, f"The new password must have at least {MINIMUM_NEW_PASSWORD_LENGTH} characters.")
+    if len(new_password.encode("utf-8")) > MAXIMUM_PASSWORD_BYTES:
+        raise AuthError(400, f"The new password can be at most {MAXIMUM_PASSWORD_BYTES} bytes long.")
+    if verify_password(new_password, login["password_hash"]):
+        raise AuthError(400, "The new password must be different from your current one.")
+
+    employee_store.update_login(record["id"], {
+        "password_hash": hash_password(new_password),
+        "must_change_password": True,
+        "failed_login_attempts": 0,
+        "locked_until": None,
+        "password_changed_at": get_current_time().isoformat(),
+        "temp_password_expires_at":
+            (get_current_time() + timedelta(hours=TEMPORARY_PASSWORD_VALID_HOURS)).isoformat(),
+        # The ticket is spent.
+        "reset_ticket_hash": None,
+        "reset_ticket_expires_at": None,
+    })
+    return {
+        "emp_id": record["emp_id"],
+        "full_name": record["full_name"],
+        "valid_hours": TEMPORARY_PASSWORD_VALID_HOURS,
     }
 
 
@@ -311,4 +486,6 @@ def change_password(employee_id, current_password, new_password):
         "failed_login_attempts": 0,
         "locked_until": None,
         "password_changed_at": get_current_time().isoformat(),
+        # The temporary password is gone now, so its deadline goes with it.
+        "temp_password_expires_at": None,
     })

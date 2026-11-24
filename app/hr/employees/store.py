@@ -14,7 +14,8 @@ AUTH_TABLE_NAME = "employee_auth"
 # One request returns the employee row together with its login row (PostgREST calls this "embedding").
 EMPLOYEE_WITH_LOGIN_COLUMNS = (
     "id,emp_id,full_name,email,dept,dob,is_active,is_confidential,"
-    "employee_auth(password_hash,role,must_change_password,failed_login_attempts,locked_until,password_changed_at),"
+    "employee_auth(password_hash,role,must_change_password,failed_login_attempts,locked_until,password_changed_at,temp_password_expires_at,"
+    "reset_ticket_hash,reset_ticket_expires_at),"
     # Only "is there a row?" - the government ID number itself is never read here. It is embedded in this
     # same request so that checking the token does not cost a second trip to the database.
     "employee_government_id(id_type,id_number_last4,submitted_at)"
@@ -34,21 +35,33 @@ def take_one_embedded_row(row, embedded_table_name):
     return embedded
 
 
-def find_employee_with_login(emp_id=None, employee_id=None):
+def find_employee_with_login(emp_id=None, employee_id=None, phone=None, phone_suffix=None):
     """
-    Find one employee by emp_id (the login id) OR by the numeric database id.
+    Find one employee by emp_id (the login id), by the numeric database id, by exact phone number,
+    or by phone_suffix - the last digits of a phone number, matched with a trailing wildcard.
+
+    phone_suffix is what the WhatsApp reset uses: the sender arrives as +919876543210 but the
+    stored number may or may not carry the country code, so matching the last ten digits is the
+    only comparison that survives both spellings.
     Returns a dictionary with a "login" key (the employee_auth row, or None when no login exists yet).
     Returns None when the employee does not exist.
     """
-    if (emp_id is None) == (employee_id is None):
-        raise ValueError("Give exactly one of emp_id or employee_id.")
+    given = [(column, value) for column, value in
+             (("emp_id", emp_id), ("id", employee_id), ("phone", phone), ("phone", phone_suffix))
+             if value is not None]
+    if len(given) != 1:
+        raise ValueError("Give exactly one of emp_id, employee_id, phone or phone_suffix.")
 
-    filter_column, filter_value = ("emp_id", emp_id) if emp_id is not None else ("id", employee_id)
+    filter_column = given[0][0]
+    if phone_suffix is not None:
+        filter_expression = "like.*" + str(phone_suffix)
+    else:
+        filter_expression = "eq." + str(given[0][1])
     response = requests.get(
         get_table_url(EMPLOYEE_TABLE_NAME),
         headers=build_headers(),
         # The value goes in "params", so requests encodes it safely (no filter injection).
-        params={"select": EMPLOYEE_WITH_LOGIN_COLUMNS, filter_column: f"eq.{filter_value}", "limit": 1},
+        params={"select": EMPLOYEE_WITH_LOGIN_COLUMNS, filter_column: filter_expression, "limit": 1},
         timeout=REQUEST_TIMEOUT_SECONDS,
     )
     check_response(response, "Reading the employee")

@@ -41,6 +41,27 @@ class ResetPasswordRequest(BaseModel):
     emp_id: str = Field(min_length=1, max_length=50)
 
 
+class WhatsAppLookupRequest(BaseModel):
+    """Turn 1 of the WhatsApp reset: is this number one of ours? Sent by the n8n workflow."""
+
+    phone_number: str = Field(min_length=1, max_length=30)
+
+
+class WhatsAppVerifyRequest(BaseModel):
+    """Turn 2: the current password the employee typed into WhatsApp, with the number it came from."""
+
+    phone_number: str = Field(min_length=1, max_length=30)
+    current_password: str = Field(min_length=1, max_length=MAXIMUM_PASSWORD_INPUT_LENGTH)
+
+
+class WhatsAppSetPasswordRequest(BaseModel):
+    """Turn 3: the password the employee chose, plus the ticket turn 2 handed back."""
+
+    phone_number: str = Field(min_length=1, max_length=30)
+    reset_ticket: str = Field(min_length=1, max_length=100)
+    new_password: str = Field(min_length=1, max_length=MAXIMUM_PASSWORD_INPUT_LENGTH)
+
+
 class CreateEmployeeRequest(BaseModel):
     """A brand-new employee row. HR fills this in once, then calls /register to create a login for them."""
 

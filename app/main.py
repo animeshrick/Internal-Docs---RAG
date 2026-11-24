@@ -47,6 +47,9 @@ Endpoints:
     POST /admin/employees                 HR only: add a new employee row (before creating their login)
     POST /register                        HR only: create a login for an existing employee
     POST /reset-password                  HR only: give an employee a new temporary password
+    POST /internal/whatsapp/lookup        n8n only (X-Internal-Key): is this WhatsApp number one of ours?
+    POST /internal/whatsapp/verify-password n8n only (X-Internal-Key): current password in, short-lived ticket out
+    POST /internal/whatsapp/set-password    n8n only (X-Internal-Key): ticket + chosen password in, saved as temporary
     GET  /superadmin/government-ids       super admin only: who has submitted a government ID and who has not
     GET  /superadmin/government-ids/{emp_id}   super admin only: one person's ID with the full number (audited)
     GET  /superadmin/government-ids/{emp_id}/image-url   super admin only: temporary link to one side (?side=front)
@@ -85,11 +88,12 @@ import datetime
 import logging
 import os
 import re
+import secrets
 import uuid
 from contextlib import asynccontextmanager
 from typing import Literal
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -125,6 +129,9 @@ from app.api.requests import (
     LoginRequest,
     RegisterRequest,
     ResetPasswordRequest,
+    WhatsAppLookupRequest,
+    WhatsAppVerifyRequest,
+    WhatsAppSetPasswordRequest,
     SendMessageRequest,
     WhatsAppNumberRequest,
 )
@@ -145,6 +152,7 @@ from app.api.responses import (
 )
 from app.core import downtime
 from app.core import presence
+from app.core.config import get_setting
 from app.core.logs import setup_logging
 from app.identity import auth
 from app.hr.attendance import service as attendance_service
@@ -296,6 +304,19 @@ def require_superadmin(employee: dict = Depends(get_ready_employee)):
     return employee
 
 
+def require_internal_caller(x_internal_key: str | None = Header(default=None, alias="X-Internal-Key")):
+    """
+    Not a person: the n8n WhatsApp workflow calling us machine to machine with a shared key.
+    These endpoints carry no login token, so this header is the only thing standing in front of them.
+    Keep them off the public internet as well; the key is a second lock, not the first one.
+    """
+    expected_key = get_setting("INTERNAL_API_KEY")
+    if not expected_key:
+        raise AuthError(503, "The internal API is switched off. Set INTERNAL_API_KEY in .env to use it.")
+    if not x_internal_key or not secrets.compare_digest(x_internal_key, expected_key):
+        raise AuthError(401, "Not allowed.")
+
+
 MESSAGES_SHOWN_TO_THE_AI = 6      # the AI reads the last 3 questions and 3 answers
 
 
@@ -414,6 +435,30 @@ def reset_password(request: ResetPasswordRequest, hr_employee: dict = Depends(re
     """HR only. New temporary password for a forgotten password or a locked account."""
     result = auth.reset_password(request.emp_id)
     logger.info("Password reset for %s by %s", result["emp_id"], hr_employee["emp_id"])
+    return result
+
+
+# ------------------------------------------------------------------ WhatsApp password reset (n8n)
+# Nothing here is logged with the phone number or the password in it.
+@app.post("/internal/whatsapp/lookup")
+def whatsapp_lookup(request: WhatsAppLookupRequest, _=Depends(require_internal_caller)):
+    """Turn 1. 200 means the bot may ask for the current password; 404 and 429 are errors it reads out."""
+    record = auth.find_employee_for_whatsapp(request.phone_number)
+    return {"emp_id": record["emp_id"], "full_name": record["full_name"]}
+
+
+@app.post("/internal/whatsapp/verify-password")
+def whatsapp_verify_password(request: WhatsAppVerifyRequest, _=Depends(require_internal_caller)):
+    """Turn 2. Current password in, short-lived reset_ticket out. 401 and 429 are read out by the bot."""
+    return auth.verify_current_password_from_whatsapp(request.phone_number, request.current_password)
+
+
+@app.post("/internal/whatsapp/set-password")
+def whatsapp_set_password(request: WhatsAppSetPasswordRequest, _=Depends(require_internal_caller)):
+    """Turn 3. The chosen password is saved as a TEMPORARY one: still must be changed on the website."""
+    result = auth.set_temporary_password_from_whatsapp(
+        request.phone_number, request.reset_ticket, request.new_password)
+    logger.info("Temporary password set over WhatsApp for %s", result["emp_id"])
     return result
 
 
