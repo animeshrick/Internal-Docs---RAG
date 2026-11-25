@@ -7,7 +7,7 @@ import re
 from app.core.supabase import flatten_role, read_rows
 
 PROFILE_COLUMNS = ("id,emp_id,full_name,email,phone,dept,dob,doj,gender,manager_id,is_active,is_confidential,"
-                   "full_current_address,emergency_ph_no,employee_auth(role)")
+                   "full_current_address,emergency_ph_no,image,employee_auth(role)")
 
 
 def build_emp_id_variants(text):

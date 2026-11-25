@@ -120,6 +120,7 @@ class ProfileResponse(BaseModel):
     emergency_contact: str | None = None
     manager_name: str | None = None
     is_active: bool
+    image: str | None = None  # public photo URL from employee.image, None when no photo is stored
 
 
 # ------------------------------------------------------------------ attendance

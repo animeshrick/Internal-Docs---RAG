@@ -2,14 +2,16 @@
 hr/leave/service.py - the leave RULES. No web code and no AI here, so every rule can be tested on its own.
 
 Rules (agreed with HR):
-    - Casual 8 and sick 12 days per year, maternity 90 days per request (the numbers live in the leave_types table).
+    - Casual 14 and sick 3 days per year, maternity 90 days per request (the numbers live in the leave_types table).
+      Casual accrues: 2 on 1 January, then +1 on the 1st of each month. Sick is credited in full on 1 January.
+      The leave year is the calendar year, and unused balance carries forward on 31 December.
     - Monday to Friday is the working week; weekends and company holidays are not counted.
     - Full day or half day. A half day is a single date.
     - One request spans at most 7 consecutive days (maternity has no such limit).
     - A leave can start at most 7 days in the past.
     - Maternity (Female only) is applied on the website with a document.
-    - Sick Leave for more than 1 day needs a supporting document too (require_document_above_days in leave_types);
-      1 day or less can still be applied in the chat with no document, as before.
+    - Sick Leave for more than 2 days needs a supporting document too (require_document_above_days in leave_types);
+      2 days or less can still be applied in the chat with no document, as before.
     - Work From Home (wfh) has no yearly quota and no per-request day limit (limit_type "unlimited" -
       see 17_wfh_unlimited.sql).
     - EVERY leave - casual, sick, maternity and WFH alike - is decided only by the super admin. HR has
@@ -22,7 +24,7 @@ from app.hr.leave import store as leave_store
 from app.identity.auth import parse_timestamp
 
 BACKDATE_LIMIT_DAYS = 7
-LEAVE_YEAR_START_MONTH = 4      # the leave year starts on 1 April (keep equal to the value in sql/04_leave_system.sql)
+LEAVE_YEAR_START_MONTH = 1      # the leave year starts on 1 January (keep equal to leave_year_start_month in the get_leave_balances SQL function)
 COMPANY_TIME_ZONE = timezone(timedelta(hours=5, minutes=30))   # India time
 
 PM_DEPARTMENT = "PM"            # the Project Manager approves leave when an employee has no manager_id
@@ -46,9 +48,9 @@ def get_today():
 
 
 def leave_year_label(any_date):
-    """The name of the leave year a date belongs to, for example 2026-11-09 gives 'FY 2026-27'."""
+    """The name of the leave year a date belongs to, for example 2026-11-09 gives '2026'."""
     first_year = any_date.year if any_date.month >= LEAVE_YEAR_START_MONTH else any_date.year - 1
-    return f"FY {first_year}-{str(first_year + 1)[-2:]}"
+    return str(first_year)
 
 
 def get_now():

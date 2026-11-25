@@ -73,6 +73,7 @@ def read_own_profile(employee):
         "email": row["email"], "phone": row["phone"], "gender": row["gender"], "date_of_joining": row["doj"],
         "date_of_birth": row["dob"], "address": row["full_current_address"], "emergency_contact": row["emergency_ph_no"],
         "manager_name": manager["full_name"] if manager else None, "is_active": row["is_active"],
+        "image": row.get("image"),
     }
 
 

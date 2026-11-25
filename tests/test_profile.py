@@ -30,6 +30,13 @@ def test_my_profile_shows_my_details_and_my_manager(fakes):
     assert body["address"] is None
 
 
+def test_my_profile_returns_my_photo_url_or_none(monkeypatch):
+    assert client.get("/me/profile", headers=HEADERS).json()["image"] is None
+    photo = "https://example.supabase.co/storage/v1/object/public/employee-photos/EMP-1004.jpg"
+    monkeypatch.setattr(people_store, "get_profile", lambda employee_id: {**ROW, "image": photo})
+    assert client.get("/me/profile", headers=HEADERS).json()["image"] == photo
+
+
 def test_my_profile_never_includes_the_salary_or_the_confidential_flag():
     body = client.get("/me/profile", headers=HEADERS).json()
     assert "salary" not in body and "is_confidential" not in body

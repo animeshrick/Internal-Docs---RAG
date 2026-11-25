@@ -176,7 +176,7 @@ ANSWER_WITH_DATA_SYSTEM_PROMPT = ANSWER_SYSTEM_PROMPT + """
 11. Exception to rule 2: if EMPLOYEE DATA answers the question, answer from it even when the sources say nothing about the topic.
 12. When the employee asks about their leave balance, say how many days they are allowed, then how many are used, how many wait for approval and how many are left.
 13. For the total, use the TOTAL line of EMPLOYEE DATA exactly. Never add maternity leave to the total and never do your own addition.
-14. Mention maternity leave only as a separate sentence, and only if EMPLOYEE DATA lists it. Use this shape: "You have 20 days of leave remaining (Casual 8 days + Sick 12 days). Maternity leave is separate: up to 90 days for female employees." Use the real numbers from EMPLOYEE DATA.
+14. Mention maternity leave only as a separate sentence, and only if EMPLOYEE DATA lists it. Use this shape: "You have 17 days of leave remaining (Casual 14 days + Sick 3 days). Maternity leave is separate: up to 90 days for female employees." Use the real numbers from EMPLOYEE DATA.
 15. For attendance, quote the counts, dates and times of EMPLOYEE DATA exactly. Never work out hours or counts yourself.
 """
 
@@ -261,7 +261,7 @@ def answer_with_employee_data(question, employee_data_text):
 # ------------------------------------------------------------------ employee data as plain text
 def build_balance_text(employee_row, owner_label=None):
     today = leave_service.get_today()
-    lines = [f"Today is {today.isoformat()}. The leave year is {leave_service.leave_year_label(today)} (1 April to 31 March)."]
+    lines = [f"Today is {today.isoformat()}. The leave year is {leave_service.leave_year_label(today)} (1 January to 31 December)."]
     if owner_label:
         lines.append(f"These records belong to {owner_label}, not to the person asking (the person asking is HR).")
     balances = leave_store.get_leave_balances(employee_row["id"], today)

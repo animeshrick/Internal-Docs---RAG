@@ -34,3 +34,8 @@ app/rag/ingest/embeddings_with_voyage.py
 # Supabase CLI local files
 supabase/.temp/
 supabase/.branches/
+
+
+govtids
+photos
+cloudflared.exe
